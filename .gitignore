@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.DS_Store
+*.tsbuildinfo
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+data/
+
+frontend/node_modules/
+frontend/dist/
+frontend/vite.config.js
+frontend/vite.config.d.ts
+
+backend/.venv/
+backend/data/

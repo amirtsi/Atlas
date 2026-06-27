@@ -1,0 +1,23 @@
+services:
+  atlas-backend:
+    build:
+      context: ./backend
+    environment:
+      ATLAS_ENV: production
+      ATLAS_DATABASE_PATH: /data/atlas.sqlite
+      ATLAS_CORS_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
+    volumes:
+      - atlas_data:/data
+    ports:
+      - "8000:8000"
+
+  atlas-frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      - atlas-backend
+    ports:
+      - "8080:80"
+
+volumes:
+  atlas_data:
