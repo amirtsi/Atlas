@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   BatteryCharging,
@@ -10,7 +10,10 @@ import {
   Gauge,
   History,
   Layers3,
+  Maximize2,
+  Newspaper,
   Plus,
+  Quote as QuoteIcon,
   Save,
   ShieldCheck,
   Sparkles,
@@ -70,23 +73,48 @@ function Panel({
   eyebrow,
   icon,
   className = "",
+  onOpen,
   children
 }: {
   title: string;
   eyebrow?: string;
   icon?: React.ReactNode;
   className?: string;
+  onOpen?: () => void;
   children: React.ReactNode;
 }) {
+  const interactive = Boolean(onOpen);
+  const interactiveProps = interactive
+    ? {
+        role: "button",
+        tabIndex: 0,
+        "aria-haspopup": "dialog" as const,
+        "aria-label": `${title} — הצג פירוט`,
+        onClick: onOpen,
+        onKeyDown: (event: React.KeyboardEvent<HTMLElement>) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onOpen?.();
+          }
+        }
+      }
+    : {};
+
   return (
-    <section className={`panel ${className}`}>
+    <section className={`panel ${interactive ? "panel-interactive" : ""} ${className}`} {...interactiveProps}>
       <div className="panel-content">
         <header className="panel-header">
           <div>
             {eyebrow ? <span className="panel-eyebrow">{eyebrow}</span> : null}
             <h2>{title}</h2>
           </div>
-          {icon ? <div className="panel-icon">{icon}</div> : null}
+          {interactive ? (
+            <div className="panel-expand" aria-hidden="true">
+              <Maximize2 size={15} />
+            </div>
+          ) : icon ? (
+            <div className="panel-icon">{icon}</div>
+          ) : null}
         </header>
         {children}
       </div>
@@ -121,6 +149,15 @@ function accentForSlug(slug?: string | null): Accent {
   };
   return (slug && accents[slug]) || "blue";
 }
+
+const accentColorVar: Record<Accent, string> = {
+  blue: "var(--blue)",
+  purple: "var(--purple)",
+  green: "var(--green)",
+  orange: "var(--orange)",
+  red: "var(--red)",
+  neutral: "rgba(255, 255, 255, 0.45)"
+};
 
 function formatActivityTime(occurredAt: string): string {
   const date = new Date(occurredAt);
@@ -182,12 +219,12 @@ function slugify(value: string): string {
     .slice(0, 48);
 }
 
-function WelcomePanel({ dashboard }: { dashboard: DashboardResponse | null }) {
+function WelcomePanel({ dashboard, onOpen }: { dashboard: DashboardResponse | null; onOpen: () => void }) {
   const recommendation = dashboard?.recommendations[0];
   const signals = dashboard?.real_signals;
 
   return (
-    <Panel title="קוקפיט היום" eyebrow="Real signals only" icon={<Gauge size={21} />} className="welcome-panel">
+    <Panel title="קוקפיט היום" eyebrow="Real signals only" icon={<Gauge size={21} />} className="welcome-panel" onOpen={onOpen}>
       <p className="decision-text">
         {recommendation ? (
           <>
@@ -230,63 +267,92 @@ function WelcomePanel({ dashboard }: { dashboard: DashboardResponse | null }) {
   );
 }
 
-function LifePulse({ dashboard }: { dashboard: DashboardResponse | null }) {
-  const disciplines = useMemo(() => {
-    if (!dashboard?.weekly_balance.length) {
-      return [];
+function LifePulse({ dashboard, onOpen }: { dashboard: DashboardResponse | null; onOpen: () => void }) {
+  const { bars, ringStyle, average } = useMemo(() => {
+    const items = dashboard?.weekly_balance ?? [];
+    if (!items.length) {
+      return { bars: [], ringStyle: undefined as React.CSSProperties | undefined, average: 0 };
     }
 
-    const maxDuration = Math.max(...dashboard.weekly_balance.map((item) => item.duration_minutes), 1);
-    return dashboard.weekly_balance.slice(0, 7).map((item) => ({
-      name: item.discipline_slug,
+    const ranked = items.slice(0, 6);
+    const maxDuration = Math.max(...ranked.map((item) => item.duration_minutes), 1);
+    const totalDuration = ranked.reduce((sum, item) => sum + item.duration_minutes, 0);
+
+    const nextBars = ranked.map((item) => ({
+      key: item.discipline_slug ?? item.discipline_id,
       label: disciplineLabel(item.discipline_slug, item.discipline_name),
-      score: Math.max(28, Math.round((item.duration_minutes / maxDuration) * 86)),
+      score: Math.max(8, Math.round((item.duration_minutes / maxDuration) * 100)),
+      share: totalDuration ? item.duration_minutes / totalDuration : 0,
       accent: accentForSlug(item.discipline_slug)
     }));
+
+    const nextAverage = nextBars.length
+      ? Math.round(nextBars.reduce((sum, item) => sum + item.score, 0) / nextBars.length)
+      : 0;
+
+    let cursor = 0;
+    const stops = totalDuration
+      ? nextBars.map((bar) => {
+          const start = cursor * 360;
+          cursor += bar.share;
+          const end = cursor * 360;
+          return `${accentColorVar[bar.accent]} ${start.toFixed(2)}deg ${end.toFixed(2)}deg`;
+        })
+      : [];
+
+    const nextRingStyle: React.CSSProperties | undefined = stops.length
+      ? {
+          background: `radial-gradient(circle at center, var(--bg-2) 0 63%, transparent 64%), conic-gradient(${stops.join(", ")})`
+        }
+      : undefined;
+
+    return { bars: nextBars, ringStyle: nextRingStyle, average: nextAverage };
   }, [dashboard]);
 
-  const average = disciplines.length
-    ? Math.round(disciplines.reduce((sum, item) => sum + item.score, 0) / disciplines.length)
-    : 0;
+  const hasData = bars.length > 0;
 
   return (
-    <Panel title="Life Pulse" eyebrow="Balance overview" icon={<CircleDot size={22} />} className="life-pulse-panel">
-      <div className="pulse-stage" aria-label="Life disciplines balance visualization">
-        <div className="pulse-orbit pulse-orbit-outer" />
-        <div className="pulse-orbit pulse-orbit-inner" />
-        <div className="pulse-ring" />
-        <div className="pulse-core">
-          <span>Balance</span>
-          <strong>{average}%</strong>
-          <small>{dashboard ? "Live weekly signal" : "No API signal"}</small>
+    <Panel title="Life Pulse" eyebrow="Weekly balance" icon={<CircleDot size={21} />} className="life-pulse-panel" onOpen={onOpen}>
+      <div className="pulse-stage" aria-label="איזון שבועי בין תחומי החיים">
+        <div className="pulse-dial">
+          <div className="pulse-aura" aria-hidden="true" />
+          <div className={`pulse-ring ${hasData ? "" : "is-empty"}`} style={ringStyle} aria-hidden="true" />
+          <div className="pulse-core">
+            <span>Balance</span>
+            <strong>{average}%</strong>
+            <small>{dashboard ? "Live weekly signal" : "No API signal"}</small>
+          </div>
         </div>
 
-        {disciplines.length ? (
-          disciplines.map((discipline, index) => (
-            <div
-              className={`discipline-node discipline-${index + 1}`}
-              key={discipline.name}
-              style={{ "--score": `${discipline.score}%` } as React.CSSProperties}
-            >
-              <span>{discipline.label}</span>
-              <strong>{discipline.score}</strong>
-            </div>
-          ))
+        {hasData ? (
+          <div className="pulse-legend">
+            {bars.map((bar) => (
+              <div className="pulse-bar-row" key={bar.key}>
+                <div className="pulse-bar-head">
+                  <span className="pulse-bar-label">{bar.label}</span>
+                  <strong className="pulse-bar-score">{bar.score}</strong>
+                </div>
+                <div className="pulse-bar-track">
+                  <div className={`pulse-bar-fill bar-${bar.accent}`} style={{ width: `${bar.score}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
-          <p className="empty-panel-copy">אין נתוני שבוע חיים עדיין.</p>
+          <p className="empty-panel-copy">אין נתוני שבוע חיים עדיין. רשום פעולה כדי לראות איזון בין התחומים.</p>
         )}
       </div>
     </Panel>
   );
 }
 
-function MissionCenter({ dashboard }: { dashboard: DashboardResponse | null }) {
+function MissionCenter({ dashboard, onOpen }: { dashboard: DashboardResponse | null; onOpen: () => void }) {
   const missions = useMemo(() => {
     if (!dashboard?.active_modules.length) {
       return [];
     }
 
-    return dashboard.active_modules.slice(0, 3).map((module) => {
+    return dashboard.active_modules.slice(0, 2).map((module) => {
       const summary = module.behavior?.summary ?? {};
       const progress = summaryNumber(summary, "progress_percent", module.type === "recovery" ? 38 : 50);
       const nextActionByType: Record<string, string> = {
@@ -307,7 +373,7 @@ function MissionCenter({ dashboard }: { dashboard: DashboardResponse | null }) {
   }, [dashboard]);
 
   return (
-    <Panel title="Mission Center" eyebrow="3-5 modules only" icon={<Layers3 size={21} />} className="mission-panel">
+    <Panel title="Mission Center" eyebrow="3-5 modules only" icon={<Layers3 size={21} />} className="mission-panel" onOpen={onOpen}>
       <div className="mission-list">
         {missions.length ? (
           missions.map((module) => (
@@ -331,13 +397,13 @@ function MissionCenter({ dashboard }: { dashboard: DashboardResponse | null }) {
   );
 }
 
-function LifeTimeline({ dashboard }: { dashboard: DashboardResponse | null }) {
+function LifeTimeline({ dashboard, onOpen }: { dashboard: DashboardResponse | null; onOpen: () => void }) {
   const timeline = useMemo(() => {
     if (!dashboard?.recent_activities.length) {
       return [];
     }
 
-    return dashboard.recent_activities.slice(0, 4).map((activity) => ({
+    return dashboard.recent_activities.slice(0, 3).map((activity) => ({
       time: formatActivityTime(activity.occurred_at),
       title: activity.title,
       discipline: disciplineLabel(activity.discipline_slug, activity.discipline_name),
@@ -347,7 +413,7 @@ function LifeTimeline({ dashboard }: { dashboard: DashboardResponse | null }) {
   }, [dashboard]);
 
   return (
-    <Panel title="Life Timeline" eyebrow="Completed real actions" icon={<History size={21} />} className="timeline-panel">
+    <Panel title="Life Timeline" eyebrow="Completed real actions" icon={<History size={21} />} className="timeline-panel" onOpen={onOpen}>
       <div className="timeline-list">
         {timeline.length ? (
           timeline.map((activity) => (
@@ -373,10 +439,12 @@ function LifeTimeline({ dashboard }: { dashboard: DashboardResponse | null }) {
 
 function DashboardCalendar({
   activities,
-  onOpenJournal
+  onOpenJournal,
+  onOpen
 }: {
   activities: JournalActivity[];
   onOpenJournal: () => void;
+  onOpen: () => void;
 }) {
   const [selectedDateKey, setSelectedDateKey] = useState(() => formatDateKey(new Date()));
   const today = new Date();
@@ -401,7 +469,7 @@ function DashboardCalendar({
     : new Intl.DateTimeFormat("he-IL", { weekday: "long", day: "numeric", month: "short" }).format(selectedDate);
 
   return (
-    <Panel title="יומן / לוח שנה" eyebrow="Live activity calendar" icon={<CalendarClock size={21} />} className="dashboard-calendar-panel">
+    <Panel title="יומן / לוח שנה" eyebrow="Live activity calendar" icon={<CalendarClock size={21} />} className="dashboard-calendar-panel" onOpen={onOpen}>
       <div className="dashboard-calendar-summary">
         <div>
           <span>{selectedLabel}</span>
@@ -421,7 +489,10 @@ function DashboardCalendar({
               className={`dashboard-calendar-day ${isToday ? "today" : ""} ${isSelected ? "selected" : ""} ${dayActivities.length ? "has-activity" : ""}`}
               key={key}
               type="button"
-              onClick={() => setSelectedDateKey(key)}
+              onClick={(event) => {
+                event.stopPropagation();
+                setSelectedDateKey(key);
+              }}
             >
               <span>{new Intl.DateTimeFormat("he-IL", { weekday: "short" }).format(day)}</span>
               <strong>{day.getDate()}</strong>
@@ -433,7 +504,7 @@ function DashboardCalendar({
 
       <div className="dashboard-agenda-list">
         {selectedActivities.length ? (
-          selectedActivities.slice(0, 3).map((activity) => (
+          selectedActivities.slice(0, 2).map((activity) => (
             <article className="dashboard-agenda-item" key={activity.id}>
               <div>
                 <strong>{activity.title}</strong>
@@ -449,7 +520,14 @@ function DashboardCalendar({
         )}
       </div>
 
-      <button className="dashboard-calendar-open" type="button" onClick={onOpenJournal}>
+      <button
+        className="dashboard-calendar-open"
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpenJournal();
+        }}
+      >
         <History size={16} />
         פתח יומן מלא
       </button>
@@ -457,7 +535,7 @@ function DashboardCalendar({
   );
 }
 
-function ChiefOfStaff({ dashboard }: { dashboard: DashboardResponse | null }) {
+function ChiefOfStaff({ dashboard, onOpen }: { dashboard: DashboardResponse | null; onOpen: () => void }) {
   const recommendation = dashboard?.recommendations[0];
   const chief = {
     signal: recommendation ? "Live life balance signal" : "No recommendation yet",
@@ -467,7 +545,7 @@ function ChiefOfStaff({ dashboard }: { dashboard: DashboardResponse | null }) {
   };
 
   return (
-    <Panel title="Chief of Staff" eyebrow={chief.signal} className="chief-panel">
+    <Panel title="Chief of Staff" eyebrow={chief.signal} className="chief-panel" onOpen={onOpen}>
       <div className="ai-core-wrap" aria-hidden="true">
         <div className="ai-core">
           <div className="ai-core-inner" />
@@ -480,6 +558,237 @@ function ChiefOfStaff({ dashboard }: { dashboard: DashboardResponse | null }) {
         <p dir="auto">{chief.body}</p>
       </div>
     </Panel>
+  );
+}
+
+function RightNowHero({
+  dashboard,
+  onOpen,
+  onQuickLog
+}: {
+  dashboard: DashboardResponse | null;
+  onOpen: () => void;
+  onQuickLog: () => void;
+}) {
+  const recommendation = dashboard?.recommendations[0];
+  const signals = dashboard?.real_signals;
+  const confidence = recommendation
+    ? recommendation.severity === "critical"
+      ? 92
+      : recommendation.severity === "warning"
+        ? 86
+        : 78
+    : 0;
+
+  return (
+    <section
+      className="panel panel-interactive tile-hero"
+      role="button"
+      tabIndex={0}
+      aria-haspopup="dialog"
+      aria-label="מה הכי נכון עכשיו — הצג המלצות"
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+    >
+      <div className="panel-content hero-content">
+        <header className="hero-head">
+          <span className="hero-eyebrow">
+            <Sparkles size={15} />
+            מה הכי נכון לעשות עכשיו?
+          </span>
+          {recommendation ? <span className="hero-confidence">{confidence}% confidence</span> : null}
+        </header>
+
+        <div className="hero-body">
+          <h2 dir="auto">{recommendation ? recommendation.title : "רשום פעולה אחת אמיתית כדי לתת ל־Atlas signal"}</h2>
+          <p dir="auto">
+            {recommendation
+              ? recommendation.body
+              : "Atlas ימליץ על הצעד הבא מתוך פעילות אמיתית ואיזון בין התחומים."}
+          </p>
+        </div>
+
+        <div className="hero-actions">
+          <button
+            className="btn-primary"
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onQuickLog();
+            }}
+          >
+            <Plus size={18} strokeWidth={2.6} />
+            רישום מהיר
+          </button>
+          <button
+            className="btn-ghost"
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpen();
+            }}
+          >
+            כל ההמלצות
+          </button>
+        </div>
+
+        <div className="hero-stats">
+          <div>
+            <span>היום</span>
+            <strong>
+              {signals?.today_activity_count ?? 0} · {signals?.today_duration_minutes ?? 0}ד׳
+            </strong>
+          </div>
+          <div>
+            <span>השבוע</span>
+            <strong>
+              {signals?.week_activity_count ?? 0} · {signals?.week_duration_minutes ?? 0}ד׳
+            </strong>
+          </div>
+          <div>
+            <span>מודולים</span>
+            <strong>{signals?.active_module_count ?? 0}</strong>
+          </div>
+          <div>
+            <span>אחרון</span>
+            <strong dir="auto" className="hero-stat-ellipsis">{signals?.last_activity_title ?? "—"}</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+const MOTIVATION_QUOTES: { text: string; author: string }[] = [
+  { text: "You have power over your mind — not outside events. Realize this, and you will find strength.", author: "Marcus Aurelius" },
+  { text: "Discipline equals freedom.", author: "Jocko Willink" },
+  { text: "We are what we repeatedly do. Excellence, then, is not an act, but a habit.", author: "Aristotle" },
+  { text: "It does not matter how slowly you go as long as you do not stop.", author: "Confucius" },
+  { text: "המעשים הקטנים שאתה עושה היום בונים את מי שתהיה מחר.", author: "Atlas" },
+  { text: "Small daily improvements over time lead to stunning results.", author: "Robin Sharma" },
+  { text: "The best way to predict the future is to invent it.", author: "Alan Kay" },
+  { text: "What gets measured gets managed.", author: "Peter Drucker" },
+  { text: "ההצלחה היא סך כל המאמצים הקטנים שחוזרים על עצמם יום אחרי יום.", author: "Robert Collier" },
+  { text: "The successful warrior is the average man, with laser-like focus.", author: "Bruce Lee" },
+  { text: "Well begun is half done.", author: "Aristotle" },
+  { text: "Do something today that your future self will thank you for.", author: "Unknown" }
+];
+
+function QuoteStrip() {
+  const quote = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 0).getTime();
+    const dayOfYear = Math.floor((now.getTime() - start) / 86_400_000);
+    return MOTIVATION_QUOTES[dayOfYear % MOTIVATION_QUOTES.length];
+  }, []);
+
+  return (
+    <aside className="quote-strip" aria-label="ציטוט היום">
+      <QuoteIcon size={16} aria-hidden="true" />
+      <p dir="auto">
+        {quote.text} <small>— {quote.author}</small>
+      </p>
+    </aside>
+  );
+}
+
+type NewsItem = { id: number; title: string; url: string; score: number };
+
+function useTechNews() {
+  const [items, setItems] = useState<NewsItem[]>([]);
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      try {
+        const ids: number[] = await fetch("https://hacker-news.firebaseio.com/v0/topstories.json").then((response) => {
+          if (!response.ok) {
+            throw new Error("news");
+          }
+          return response.json();
+        });
+        const stories = await Promise.all(
+          ids.slice(0, 10).map((id) =>
+            fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`).then((response) => response.json())
+          )
+        );
+        if (!active) {
+          return;
+        }
+        setItems(
+          stories.filter(Boolean).map((story) => ({
+            id: story.id,
+            title: story.title,
+            url: typeof story.url === "string" ? story.url : `https://news.ycombinator.com/item?id=${story.id}`,
+            score: typeof story.score === "number" ? story.score : 0
+          }))
+        );
+        setStatus("ready");
+      } catch {
+        if (active) {
+          setStatus("error");
+        }
+      }
+    }
+    load();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return { items, status };
+}
+
+function NewsList({ items }: { items: NewsItem[] }) {
+  return (
+    <ul className="news-list">
+      {items.map((item, index) => (
+        <li className="news-item" key={item.id}>
+          <a href={item.url} target="_blank" rel="noopener noreferrer" onClick={(event) => event.stopPropagation()}>
+            <span className="news-rank">{index + 1}</span>
+            <span className="news-title" dir="auto">{item.title}</span>
+            <span className="news-score">▲ {item.score}</span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function NewsTile() {
+  const { items, status } = useTechNews();
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <>
+      <Panel
+        title="Tech News"
+        eyebrow="Hacker News · top stories"
+        icon={<Newspaper size={21} />}
+        className="news-panel"
+        onOpen={() => setIsOpen(true)}
+      >
+        {status === "loading" ? <p className="news-empty">טוען חדשות טכנולוגיה…</p> : null}
+        {status === "error" ? <p className="news-empty">לא ניתן לטעון חדשות כרגע. בדוק חיבור לרשת.</p> : null}
+        {status === "ready" ? <NewsList items={items.slice(0, 4)} /> : null}
+      </Panel>
+
+      {isOpen ? (
+        <Modal eyebrow="Hacker News" title="Tech News" onClose={() => setIsOpen(false)}>
+          {status === "ready" ? (
+            <NewsList items={items} />
+          ) : (
+            <p className="news-empty">{status === "error" ? "לא ניתן לטעון חדשות כרגע." : "טוען…"}</p>
+          )}
+        </Modal>
+      ) : null}
+    </>
   );
 }
 
@@ -1389,6 +1698,239 @@ function ModulesView({
   );
 }
 
+type CockpitModalKind = "today" | "pulse" | "missions" | "chief" | "calendar";
+
+function severityAccent(severity: string): Accent {
+  if (severity === "critical") return "red";
+  if (severity === "warning") return "orange";
+  return "blue";
+}
+
+function Modal({
+  eyebrow,
+  title,
+  onClose,
+  children
+}: {
+  eyebrow?: string;
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const sheetRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    sheetRef.current?.focus();
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      previouslyFocused?.focus?.();
+    };
+  }, [onClose]);
+
+  return (
+    <div className="modal-overlay" role="presentation" onClick={onClose}>
+      <div
+        className="modal-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        tabIndex={-1}
+        ref={sheetRef}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="modal-header">
+          <div>
+            {eyebrow ? <span>{eyebrow}</span> : null}
+            <h2 dir="auto">{title}</h2>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="סגור">
+            <X size={20} />
+          </button>
+        </header>
+        <div className="modal-body">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function CockpitModal({
+  kind,
+  dashboard,
+  activities,
+  onClose,
+  onOpenJournal
+}: {
+  kind: CockpitModalKind;
+  dashboard: DashboardResponse | null;
+  activities: JournalActivity[];
+  onClose: () => void;
+  onOpenJournal: () => void;
+}) {
+  if (kind === "today") {
+    const signals = dashboard?.real_signals;
+    const recommendation = dashboard?.recommendations[0];
+    const recent = dashboard?.recent_activities.slice(0, 6) ?? [];
+    return (
+      <Modal eyebrow="Real signals only" title="סקירת היום" onClose={onClose}>
+        <p className="modal-lead" dir="auto">
+          {recommendation ? recommendation.title : "רשום פעולה אחת אמיתית כדי לתת ל־Atlas signal."}
+        </p>
+        <div className="detail-grid">
+          <div className="detail-stat"><span>פעולות היום</span><strong>{signals?.today_activity_count ?? 0}</strong></div>
+          <div className="detail-stat"><span>זמן היום</span><strong>{signals?.today_duration_minutes ?? 0} דק׳</strong></div>
+          <div className="detail-stat"><span>פעולות השבוע</span><strong>{signals?.week_activity_count ?? 0}</strong></div>
+          <div className="detail-stat"><span>זמן השבוע</span><strong>{signals?.week_duration_minutes ?? 0} דק׳</strong></div>
+          <div className="detail-stat"><span>מודולים פעילים</span><strong>{signals?.active_module_count ?? 0}</strong></div>
+          <div className="detail-stat"><span>פעולה אחרונה</span><strong dir="auto">{signals?.last_activity_title ?? "—"}</strong></div>
+        </div>
+        {recent.length ? (
+          <>
+            <h3 className="detail-section-title">פעולות אחרונות</h3>
+            <div className="detail-list">
+              {recent.map((activity) => (
+                <div className="detail-row" key={activity.id}>
+                  <div>
+                    <strong dir="auto">{activity.title}</strong>
+                    <span>
+                      {formatActivityTime(activity.occurred_at)} · {activity.module_name ?? activity.activity_type} · {activity.duration_minutes ?? 0} דק׳
+                    </span>
+                  </div>
+                  <Chip accent={accentForSlug(activity.discipline_slug)}>{disciplineLabel(activity.discipline_slug, activity.discipline_name)}</Chip>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : null}
+      </Modal>
+    );
+  }
+
+  if (kind === "pulse") {
+    const items = dashboard?.weekly_balance ?? [];
+    const maxDuration = Math.max(...items.map((item) => item.duration_minutes), 1);
+    const totalMinutes = items.reduce((sum, item) => sum + item.duration_minutes, 0);
+    return (
+      <Modal eyebrow="Weekly balance" title="Life Pulse" onClose={onClose}>
+        <p className="modal-lead">{totalMinutes} דק׳ נרשמו השבוע על פני {items.length} תחומים.</p>
+        {items.length ? (
+          <div className="detail-bars">
+            {items.map((item) => {
+              const accent = accentForSlug(item.discipline_slug);
+              const width = Math.max(6, Math.round((item.duration_minutes / maxDuration) * 100));
+              return (
+                <div className="pulse-bar-row" key={item.discipline_id}>
+                  <div className="pulse-bar-head">
+                    <span className="pulse-bar-label">{disciplineLabel(item.discipline_slug, item.discipline_name)}</span>
+                    <strong className="pulse-bar-score">{item.duration_minutes} דק׳ · {item.activity_count}</strong>
+                  </div>
+                  <div className="pulse-bar-track">
+                    <div className={`pulse-bar-fill bar-${accent}`} style={{ width: `${width}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="behavior-empty">אין נתוני שבוע עדיין.</p>
+        )}
+      </Modal>
+    );
+  }
+
+  if (kind === "missions") {
+    const modules = dashboard?.active_modules ?? [];
+    return (
+      <Modal eyebrow="Active modules" title="Mission Center" onClose={onClose}>
+        {modules.length ? (
+          <div className="detail-list">
+            {modules.map((module) => {
+              const summary = module.behavior?.summary ?? {};
+              const progress = summaryNumber(summary, "progress_percent", 50);
+              const accent = accentForSlug(module.discipline_slug);
+              return (
+                <article className="mission-card" key={module.id}>
+                  <div className="mission-topline">
+                    <strong>{module.name}</strong>
+                    <Chip accent={accent}>{module.status === "active" ? "פעיל" : module.status}</Chip>
+                  </div>
+                  <ProgressBar value={progress} accent={accent} />
+                  <div className="next-action">
+                    <Zap size={15} />
+                    <span>{disciplineLabel(module.discipline_slug, module.discipline_name)} · {moduleTypeLabel(module.type)}</span>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="behavior-empty">אין modules פעילים.</p>
+        )}
+      </Modal>
+    );
+  }
+
+  if (kind === "chief") {
+    const recommendations = dashboard?.recommendations ?? [];
+    return (
+      <Modal eyebrow="Recommendations" title="Chief of Staff" onClose={onClose}>
+        {recommendations.length ? (
+          <div className="detail-list">
+            {recommendations.map((recommendation, index) => (
+              <article className="mission-card" key={`${recommendation.title}-${index}`}>
+                <div className="mission-topline">
+                  <strong dir="auto">{recommendation.title}</strong>
+                  <Chip accent={severityAccent(recommendation.severity)}>{recommendation.severity}</Chip>
+                </div>
+                <p className="modal-lead" dir="auto">{recommendation.body}</p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="behavior-empty">אין המלצות חיות עדיין.</p>
+        )}
+      </Modal>
+    );
+  }
+
+  const today = new Date();
+  const weekStart = new Date(today);
+  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(today.getDate() - today.getDay());
+  const weekActivities = activities.filter((activity) => new Date(activity.occurred_at) >= weekStart).slice(0, 14);
+  return (
+    <Modal eyebrow="This week" title="יומן השבוע" onClose={onClose}>
+      {weekActivities.length ? (
+        <div className="detail-list">
+          {weekActivities.map((activity) => (
+            <div className="detail-row" key={activity.id}>
+              <div>
+                <strong dir="auto">{activity.title}</strong>
+                <span>
+                  {new Date(activity.occurred_at).toLocaleDateString("he-IL")} · {formatActivityTime(activity.occurred_at)} · {activity.duration_minutes ?? 0} דק׳
+                </span>
+              </div>
+              <Chip accent={accentForSlug(activity.discipline_slug)}>{disciplineLabel(activity.discipline_slug, activity.discipline_name)}</Chip>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="behavior-empty">אין פעילויות השבוע.</p>
+      )}
+      <button className="modal-action" type="button" onClick={onOpenJournal}>
+        <History size={16} />
+        פתח יומן מלא
+      </button>
+    </Modal>
+  );
+}
+
 export function App() {
   const [view, setView] = useState<"dashboard" | "modules" | "journal" | "audit" | "communication">("dashboard");
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
@@ -1400,6 +1942,7 @@ export function App() {
   const [communicationProviders, setCommunicationProviders] = useState<CommunicationProvider[]>([]);
   const [communicationMessages, setCommunicationMessages] = useState<CommunicationMessage[]>([]);
   const [isQuickLogOpen, setIsQuickLogOpen] = useState(false);
+  const [activeModal, setActiveModal] = useState<CockpitModalKind | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLogging, setIsLogging] = useState(false);
   const [isSavingModule, setIsSavingModule] = useState(false);
@@ -1561,93 +2104,110 @@ export function App() {
     }
   }
 
+  const railItems = [
+    { key: "dashboard" as const, label: "Dashboard", icon: <Gauge size={20} /> },
+    { key: "journal" as const, label: "Journal", icon: <History size={20} /> },
+    { key: "modules" as const, label: "Modules", icon: <ClipboardList size={20} /> },
+    { key: "audit" as const, label: "Audit", icon: <ShieldCheck size={20} /> },
+    { key: "communication" as const, label: "Comms", icon: <MessageCircle size={20} /> }
+  ];
+  const todayLabel = new Intl.DateTimeFormat("he-IL", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
+  const statusLabel = isLoading ? "מתחבר…" : error ? "שגיאת API" : "מחובר";
+
   return (
-    <main className="cockpit-shell">
-      <header className="topbar">
-        <div className="brand">
-          <div className="mark" aria-hidden="true">
-            A
-          </div>
-          <div>
-            <h1>Atlas</h1>
-            <p>Chief of Staff · Mission Control</p>
-          </div>
+    <div className="app-shell">
+      <nav className="rail" aria-label="ניווט ראשי">
+        <div className="rail-mark" aria-hidden="true">A</div>
+
+        <div className="rail-nav">
+          {railItems.map((item) => (
+            <button
+              key={item.key}
+              className={`rail-item ${view === item.key ? "active" : ""}`}
+              type="button"
+              aria-current={view === item.key ? "page" : undefined}
+              onClick={() => setView(item.key)}
+            >
+              {item.icon}
+              <span>{item.label}</span>
+            </button>
+          ))}
         </div>
 
-        <div className="north-star">
-          <Sparkles size={18} />
-          <span>What is the best thing I should do right now?</span>
+        <button className="rail-log" type="button" onClick={() => setIsQuickLogOpen(true)}>
+          <Plus size={22} strokeWidth={2.6} />
+          <span>רישום</span>
+        </button>
+
+        <div className={`rail-status ${error ? "warn" : ""}`} role="status" aria-live="polite">
+          <span className="rail-dot" aria-hidden="true" />
+          <span>{statusLabel}</span>
         </div>
+      </nav>
 
-        <div className="top-actions">
-          <button className={`nav-button ${view === "dashboard" ? "active" : ""}`} type="button" onClick={() => setView("dashboard")}>
-            <Gauge size={18} />
-            Dashboard
-          </button>
-          <button className={`nav-button ${view === "journal" ? "active" : ""}`} type="button" onClick={() => setView("journal")}>
-            <History size={18} />
-            Journal
-          </button>
-          <button className={`nav-button ${view === "audit" ? "active" : ""}`} type="button" onClick={() => setView("audit")}>
-            <ShieldCheck size={18} />
-            Audit
-          </button>
-          <button className={`nav-button ${view === "communication" ? "active" : ""}`} type="button" onClick={() => setView("communication")}>
-            <MessageCircle size={18} />
-            Comms
-          </button>
-          <button className={`nav-button ${view === "modules" ? "active" : ""}`} type="button" onClick={() => setView("modules")}>
-            <ClipboardList size={18} />
-            Modules
-          </button>
-          <button className="quick-log-main" type="button" onClick={() => setIsQuickLogOpen(true)}>
-            <Plus size={22} strokeWidth={2.8} />
-            רישום מהיר
-          </button>
-        </div>
-      </header>
+      <main className="workspace">
+        {view === "dashboard" ? (
+          dashboard ? (
+            <>
+              <header className="workspace-head">
+                <div>
+                  <h1>היום</h1>
+                  <p>{todayLabel}</p>
+                </div>
+                <span className="ws-northstar">
+                  <Sparkles size={14} />
+                  What is the best thing I should do right now?
+                </span>
+              </header>
 
-      <div className={`api-status ${error ? "api-status-warning" : ""}`}>
-        {isLoading ? "Connecting to Atlas API..." : error || "Live data connected"}
-      </div>
+              <QuoteStrip />
 
-      {view === "dashboard" ? (
-        dashboard ? (
-          <section className="cockpit-grid" aria-label="Atlas cockpit dashboard">
-            <WelcomePanel dashboard={dashboard} />
-            <LifePulse dashboard={dashboard} />
-            <ChiefOfStaff dashboard={dashboard} />
-            <MissionCenter dashboard={dashboard} />
-            <DashboardCalendar activities={activities} onOpenJournal={() => setView("journal")} />
-          </section>
-        ) : (
-          <ApiUnavailablePanel />
-        )
-      ) : null}
+              <section className="bento" aria-label="Atlas dashboard">
+                <RightNowHero
+                  dashboard={dashboard}
+                  onOpen={() => setActiveModal("chief")}
+                  onQuickLog={() => setIsQuickLogOpen(true)}
+                />
+                <LifePulse dashboard={dashboard} onOpen={() => setActiveModal("pulse")} />
+                <MissionCenter dashboard={dashboard} onOpen={() => setActiveModal("missions")} />
+                <LifeTimeline dashboard={dashboard} onOpen={() => setActiveModal("today")} />
+                <DashboardCalendar
+                  activities={activities}
+                  onOpenJournal={() => setView("journal")}
+                  onOpen={() => setActiveModal("calendar")}
+                />
+                <NewsTile />
+              </section>
+            </>
+          ) : (
+            <ApiUnavailablePanel />
+          )
+        ) : null}
 
-      {view === "journal" ? <JournalView activities={activities} /> : null}
+        {view === "journal" ? <JournalView activities={activities} /> : null}
 
-      {view === "audit" ? <AuditView events={auditEvents} /> : null}
+        {view === "audit" ? <AuditView events={auditEvents} /> : null}
 
-      {view === "communication" ? (
-        <CommunicationView
-          providers={communicationProviders}
-          messages={communicationMessages}
-          isSaving={isSavingModule}
-          onCreateProvider={handleCreateCommunicationProvider}
-          onSendMessage={handleSendCommunicationMessage}
-        />
-      ) : null}
+        {view === "communication" ? (
+          <CommunicationView
+            providers={communicationProviders}
+            messages={communicationMessages}
+            isSaving={isSavingModule}
+            onCreateProvider={handleCreateCommunicationProvider}
+            onSendMessage={handleSendCommunicationMessage}
+          />
+        ) : null}
 
-      {view === "modules" ? (
-        <ModulesView
-          modules={modules}
-          disciplines={disciplines}
-          isSaving={isSavingModule}
-          onCreateModule={handleCreateModule}
-          onUpdateModule={handleUpdateModule}
-        />
-      ) : null}
+        {view === "modules" ? (
+          <ModulesView
+            modules={modules}
+            disciplines={disciplines}
+            isSaving={isSavingModule}
+            onCreateModule={handleCreateModule}
+            onUpdateModule={handleUpdateModule}
+          />
+        ) : null}
+      </main>
 
       <QuickLogSheet
         isOpen={isQuickLogOpen}
@@ -1661,6 +2221,19 @@ export function App() {
         onCustomLog={handleQuickLog}
         onCreateTemplate={handleCreateTemplate}
       />
-    </main>
+
+      {activeModal ? (
+        <CockpitModal
+          kind={activeModal}
+          dashboard={dashboard}
+          activities={activities}
+          onClose={() => setActiveModal(null)}
+          onOpenJournal={() => {
+            setActiveModal(null);
+            setView("journal");
+          }}
+        />
+      ) : null}
+    </div>
   );
 }
