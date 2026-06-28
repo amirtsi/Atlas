@@ -8,8 +8,11 @@ from app.modules.audit.router import router as audit_router
 from app.modules.communication.router import router as communication_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.disciplines.router import router as disciplines_router
+from app.modules.learning.router import router as learning_router
 from app.modules.life_modules.router import router as modules_router
 from app.modules.metrics.router import router as metrics_router
+from app.modules.project.router import router as project_router
+from app.modules.wellbeing.router import router as wellbeing_router
 
 
 def create_app() -> FastAPI:
@@ -35,6 +38,9 @@ def create_app() -> FastAPI:
 
     app.include_router(disciplines_router, prefix="/api/v1")
     app.include_router(modules_router, prefix="/api/v1")
+    app.include_router(project_router, prefix="/api/v1")
+    app.include_router(learning_router, prefix="/api/v1")
+    app.include_router(wellbeing_router, prefix="/api/v1")
     app.include_router(activity_router, prefix="/api/v1")
     app.include_router(audit_router, prefix="/api/v1")
     app.include_router(communication_router, prefix="/api/v1")

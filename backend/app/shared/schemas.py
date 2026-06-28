@@ -124,6 +124,55 @@ class MetricCreate(AtlasModel):
     recorded_at: str | None = None
 
 
+class ProjectItemCreate(AtlasModel):
+    item_type: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    description: str | None = None
+    status: str = "todo"
+    priority: int = 3
+    due_date: str | None = None
+
+
+class ProjectItemUpdate(AtlasModel):
+    item_type: str | None = None
+    title: str | None = None
+    description: str | None = None
+    status: str | None = None
+    priority: int | None = None
+    due_date: str | None = None
+
+
+class ProjectItemComplete(AtlasModel):
+    log_activity: bool = True
+    duration_minutes: int | None = None
+    notes: str | None = None
+
+
+class LearningUnitCreate(AtlasModel):
+    unit_type: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    status: str = "not_started"
+
+
+class LearningUnitUpdate(AtlasModel):
+    unit_type: str | None = None
+    title: str | None = None
+    status: str | None = None
+    sort_order: int | None = None
+
+
+class LearningUnitComplete(AtlasModel):
+    log_activity: bool = True
+    duration_minutes: int | None = None
+    notes: str | None = None
+
+
+class WellbeingSessionCreate(AtlasModel):
+    duration_minutes: int | None = None
+    notes: str | None = None
+    values: dict[str, float] = Field(default_factory=dict)
+
+
 class CommunicationProviderCreate(AtlasModel):
     name: str = Field(min_length=1)
     type: str = Field(min_length=1)

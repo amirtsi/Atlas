@@ -86,6 +86,34 @@ CREATE TABLE IF NOT EXISTS activity_templates (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS project_items (
+  id TEXT PRIMARY KEY,
+  module_id TEXT NOT NULL REFERENCES life_modules(id),
+  item_type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  status TEXT NOT NULL DEFAULT 'todo',
+  priority INTEGER NOT NULL DEFAULT 3,
+  due_date TEXT,
+  completed_at TEXT,
+  completed_activity_id TEXT REFERENCES activities(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS learning_units (
+  id TEXT PRIMARY KEY,
+  module_id TEXT NOT NULL REFERENCES life_modules(id),
+  unit_type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'not_started',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  completed_at TEXT,
+  completed_activity_id TEXT REFERENCES activities(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS audit_events (
   id TEXT PRIMARY KEY,
   entity_type TEXT NOT NULL,
@@ -149,6 +177,12 @@ CREATE INDEX IF NOT EXISTS idx_metrics_activity_id ON metrics(activity_id);
 
 CREATE INDEX IF NOT EXISTS idx_activity_templates_module_id ON activity_templates(module_id);
 CREATE INDEX IF NOT EXISTS idx_activity_templates_discipline_id ON activity_templates(discipline_id);
+
+CREATE INDEX IF NOT EXISTS idx_project_items_module_id ON project_items(module_id);
+CREATE INDEX IF NOT EXISTS idx_project_items_status ON project_items(status);
+
+CREATE INDEX IF NOT EXISTS idx_learning_units_module_id ON learning_units(module_id);
+CREATE INDEX IF NOT EXISTS idx_learning_units_status ON learning_units(status);
 
 CREATE INDEX IF NOT EXISTS idx_audit_events_created_at ON audit_events(created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_events_entity ON audit_events(entity_type, entity_id);
@@ -238,25 +272,12 @@ def seed_initial_data(conn: sqlite3.Connection) -> None:
             (discipline_id, name, slug, color, icon, sort_order, now, now),
         )
 
+    # Modules are the user's real life areas (scaffolding). They start empty —
+    # progress comes from real records/activities the user logs, never from seeded numbers.
     modules = [
-        (
-            "parknet",
-            "ParkNet",
-            "project",
-            "work",
-            1,
-            {
-                "progress_percent": 35,
-                "tasks_open": 4,
-                "tasks_done": 2,
-                "bugs_open": 1,
-                "bugs_done": 3,
-                "features_open": 2,
-                "features_done": 1,
-            },
-        ),
+        ("parknet", "ParkNet", "project", "work", 1, {}),
         ("gym", "Gym", "habit", "fitness", 2, {"weekly_target": 3}),
-        ("oscp", "OSCP", "learning", "learning", 1, {"progress_percent": 18, "learning_units_total": 12, "learning_units_done": 3}),
+        ("oscp", "OSCP", "learning", "learning", 1, {}),
         ("recovery", "Recovery", "recovery", "recovery", 2, {}),
         ("relationship", "Relationship", "relationship", "relationship", 3, {}),
     ]

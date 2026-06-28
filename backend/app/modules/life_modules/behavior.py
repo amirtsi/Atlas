@@ -1,6 +1,45 @@
 from datetime import UTC, datetime, timedelta
 from sqlite3 import Connection
 
+# Module types whose state is honestly derived from logged sessions + recorded metrics
+# (rather than a checklist of records). "good" tells the UI which direction is positive.
+WELLBEING_TYPES: dict[str, dict] = {
+    "recovery": {
+        "activity_type": "recovery",
+        "session_title": "Recovery session",
+        "metrics": [
+            {"key": "pain", "label": "Pain", "min": 1, "max": 10, "good": "low"},
+            {"key": "mobility", "label": "Mobility", "min": 1, "max": 10, "good": "high"},
+        ],
+    },
+    "relationship": {
+        "activity_type": "relationship",
+        "session_title": "Quality time",
+        "metrics": [
+            {"key": "quality", "label": "Quality", "min": 1, "max": 5, "good": "high"},
+        ],
+    },
+}
+
+
+def metric_stats(conn: Connection, module_id: str, metric_key: str, limit: int = 14) -> dict:
+    values = [
+        row["value_number"]
+        for row in conn.execute(
+            """
+            SELECT value_number FROM metrics
+            WHERE module_id = ? AND metric_key = ? AND value_number IS NOT NULL
+            ORDER BY recorded_at DESC LIMIT ?
+            """,
+            (module_id, metric_key, limit),
+        ).fetchall()
+    ]
+    return {
+        "latest": values[0] if values else None,
+        "avg": round(sum(values) / len(values), 1) if values else None,
+        "count": len(values),
+    }
+
 
 def clamp_percent(value: object) -> int:
     try:
@@ -52,33 +91,54 @@ def habit_streak(conn: Connection, module_id: str) -> int:
     return streak
 
 
+def project_item_counts(conn: Connection, module_id: str) -> dict:
+    """Open/done counts per item type, derived from real project_items records."""
+    counts = {item_type: {"open": 0, "done": 0} for item_type in ("task", "bug", "feature")}
+    rows = conn.execute(
+        """
+        SELECT item_type, status, COUNT(id) AS count
+        FROM project_items
+        WHERE module_id = ?
+        GROUP BY item_type, status
+        """,
+        (module_id,),
+    ).fetchall()
+    for row in rows:
+        bucket = counts.get(row["item_type"])
+        if bucket is None:
+            continue
+        bucket["done" if row["status"] == "done" else "open"] += row["count"]
+    return counts
+
+
 def build_behavior(conn: Connection, module: dict) -> dict:
     config = module.get("config") or {}
     activity = module_activity_summary(conn, module["id"])
     module_type = module["type"]
 
     if module_type == "project":
-        tasks_open = int_config(config, "tasks_open")
-        tasks_done = int_config(config, "tasks_done")
-        bugs_open = int_config(config, "bugs_open")
-        bugs_done = int_config(config, "bugs_done")
-        features_open = int_config(config, "features_open")
-        features_done = int_config(config, "features_done")
+        counts = project_item_counts(conn, module["id"])
+        tasks_open, tasks_done = counts["task"]["open"], counts["task"]["done"]
+        bugs_open, bugs_done = counts["bug"]["open"], counts["bug"]["done"]
+        features_open, features_done = counts["feature"]["open"], counts["feature"]["done"]
+        total_open = tasks_open + bugs_open + features_open
+        total_done = tasks_done + bugs_done + features_done
+        total = total_open + total_done
         return {
             "module_id": module["id"],
             "type": module_type,
             "config": config,
             "summary": {
                 **activity,
-                "progress_percent": clamp_percent(config.get("progress_percent", 0)),
+                "progress_percent": round((total_done / total) * 100) if total else 0,
                 "tasks_open": tasks_open,
                 "tasks_done": tasks_done,
                 "bugs_open": bugs_open,
                 "bugs_done": bugs_done,
                 "features_open": features_open,
                 "features_done": features_done,
-                "total_done": tasks_done + bugs_done + features_done,
-                "total_open": tasks_open + bugs_open + features_open,
+                "total_done": total_done,
+                "total_open": total_open,
             },
         }
 
@@ -99,9 +159,12 @@ def build_behavior(conn: Connection, module: dict) -> dict:
         }
 
     if module_type == "learning":
-        units_total = int_config(config, "learning_units_total")
-        units_done = int_config(config, "learning_units_done")
-        progress = clamp_percent(config.get("progress_percent", round((units_done / units_total) * 100) if units_total else 0))
+        units = conn.execute(
+            "SELECT COUNT(id) AS total, COALESCE(SUM(status = 'completed'), 0) AS done FROM learning_units WHERE module_id = ?",
+            (module["id"],),
+        ).fetchone()
+        units_total = units["total"]
+        units_done = units["done"]
         return {
             "module_id": module["id"],
             "type": module_type,
@@ -112,7 +175,23 @@ def build_behavior(conn: Connection, module: dict) -> dict:
                 "study_minutes": activity["weekly_minutes"],
                 "learning_units_total": units_total,
                 "learning_units_done": units_done,
-                "progress_percent": progress,
+                "progress_percent": round((units_done / units_total) * 100) if units_total else 0,
+            },
+        }
+
+    if module_type in WELLBEING_TYPES:
+        metric_summary = {
+            definition["key"]: metric_stats(conn, module["id"], definition["key"])
+            for definition in WELLBEING_TYPES[module_type]["metrics"]
+        }
+        return {
+            "module_id": module["id"],
+            "type": module_type,
+            "config": config,
+            "summary": {
+                **activity,
+                "sessions_week": activity["weekly_activity_count"],
+                "metrics": metric_summary,
             },
         }
 

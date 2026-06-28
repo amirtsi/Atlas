@@ -2,9 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   BatteryCharging,
+  BookOpen,
+  Bug,
   CalendarClock,
+  Check,
   CircleDot,
   ClipboardList,
+  FlaskConical,
+  GraduationCap,
   MessageCircle,
   FileClock,
   Gauge,
@@ -14,10 +19,13 @@ import {
   Newspaper,
   Plus,
   Quote as QuoteIcon,
+  Rocket,
   Save,
+  Server,
   ShieldCheck,
   Sparkles,
   Target,
+  Trash2,
   X,
   Zap
 } from "lucide-react";
@@ -35,7 +43,25 @@ import {
   type ModuleBehavior,
   type ModulePayload,
   type ModuleUpdatePayload,
+  type LearningOverview,
+  type LearningUnitType,
+  type ProjectItem,
+  type ProjectItemType,
+  type ProjectOverview,
   type QuickLogPayload,
+  type WellbeingOverview,
+  getWellbeingOverview,
+  logWellbeingSession,
+  completeLearningUnit,
+  completeProjectItem,
+  createLearningUnit,
+  createProjectItem,
+  deleteLearningUnit,
+  deleteProjectItem,
+  getLearningOverview,
+  getProjectOverview,
+  updateLearningUnit,
+  updateProjectItem,
   createCommunicationProvider,
   createActivityTemplate,
   DEFAULT_WHATSAPP_RECIPIENT,
@@ -354,13 +380,13 @@ function MissionCenter({ dashboard, onOpen }: { dashboard: DashboardResponse | n
 
     return dashboard.active_modules.slice(0, 2).map((module) => {
       const summary = module.behavior?.summary ?? {};
-      const progress = summaryNumber(summary, "progress_percent", module.type === "recovery" ? 38 : 50);
+      const progress = summaryNumber(summary, "progress_percent", 0);
       const nextActionByType: Record<string, string> = {
         project: `${summaryNumber(summary, "total_open")} פתוחים · ${summaryNumber(summary, "total_done")} הושלמו`,
         habit: `${summaryNumber(summary, "weekly_completions")}/${summaryNumber(summary, "weekly_target", 3)} השבוע · רצף ${summaryNumber(summary, "streak_days")}`,
         learning: `${summaryNumber(summary, "study_minutes")} דקות השבוע · ${summaryNumber(summary, "learning_units_done")}/${summaryNumber(summary, "learning_units_total")} יחידות`,
-        recovery: "פעולת התאוששות קצרה",
-        relationship: "זמן איכות בלי הסחות"
+        recovery: `${summaryNumber(summary, "sessions_week")} מפגשים השבוע`,
+        relationship: `${summaryNumber(summary, "sessions_week")} מפגשי זמן איכות`
       };
       return {
         name: module.name,
@@ -540,8 +566,7 @@ function ChiefOfStaff({ dashboard, onOpen }: { dashboard: DashboardResponse | nu
   const chief = {
     signal: recommendation ? "Live life balance signal" : "No recommendation yet",
     title: recommendation?.title ?? "אין המלצה חיה",
-    body: recommendation?.body ?? "Atlas צריך חיבור API ופעילות אמיתית כדי להמליץ על הצעד הבא.",
-    confidence: recommendation ? (recommendation.severity === "warning" ? 86 : 78) : 0
+    body: recommendation?.body ?? "Atlas צריך חיבור API ופעילות אמיתית כדי להמליץ על הצעד הבא."
   };
 
   return (
@@ -553,7 +578,7 @@ function ChiefOfStaff({ dashboard, onOpen }: { dashboard: DashboardResponse | nu
       </div>
 
       <div className="recommendation-copy">
-        <span className="confidence">{chief.confidence}% confidence</span>
+        {recommendation ? <Chip accent={severityAccent(recommendation.severity)}>{severityLabel(recommendation.severity)}</Chip> : null}
         <h3 dir="auto">{chief.title}</h3>
         <p dir="auto">{chief.body}</p>
       </div>
@@ -572,13 +597,6 @@ function RightNowHero({
 }) {
   const recommendation = dashboard?.recommendations[0];
   const signals = dashboard?.real_signals;
-  const confidence = recommendation
-    ? recommendation.severity === "critical"
-      ? 92
-      : recommendation.severity === "warning"
-        ? 86
-        : 78
-    : 0;
 
   return (
     <section
@@ -601,7 +619,7 @@ function RightNowHero({
             <Sparkles size={15} />
             מה הכי נכון לעשות עכשיו?
           </span>
-          {recommendation ? <span className="hero-confidence">{confidence}% confidence</span> : null}
+          {recommendation ? <Chip accent={severityAccent(recommendation.severity)}>{severityLabel(recommendation.severity)}</Chip> : null}
         </header>
 
         <div className="hero-body">
@@ -1329,6 +1347,545 @@ function QuickLogSheet({
   );
 }
 
+const PROJECT_ITEM_META: Record<ProjectItemType, { label: string; singular: string; icon: React.ReactNode }> = {
+  task: { label: "Tasks", singular: "Task", icon: <ClipboardList size={15} /> },
+  bug: { label: "Bugs", singular: "Bug", icon: <Bug size={15} /> },
+  feature: { label: "Features", singular: "Feature", icon: <Rocket size={15} /> }
+};
+
+function ProjectBoard({ moduleId, accent, onChanged }: { moduleId: string; accent: Accent; onChanged: () => void }) {
+  const [overview, setOverview] = useState<ProjectOverview | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [newType, setNewType] = useState<ProjectItemType>("task");
+  const [newTitle, setNewTitle] = useState("");
+  const [isAdding, setIsAdding] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    getProjectOverview(moduleId)
+      .then((next) => {
+        if (active) {
+          setOverview(next);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [moduleId]);
+
+  async function reload() {
+    setOverview(await getProjectOverview(moduleId));
+    onChanged();
+  }
+
+  async function addItem(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const title = newTitle.trim();
+    if (!title) {
+      return;
+    }
+    setIsAdding(true);
+    try {
+      await createProjectItem(moduleId, { item_type: newType, title });
+      setNewTitle("");
+      await reload();
+    } finally {
+      setIsAdding(false);
+    }
+  }
+
+  async function runItemAction(item: ProjectItem, action: () => Promise<unknown>) {
+    setBusyId(item.id);
+    try {
+      await action();
+      await reload();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (isLoading && !overview) {
+    return <p className="behavior-empty">טוען project…</p>;
+  }
+  if (!overview) {
+    return <p className="behavior-empty">לא ניתן לטעון את ה-project.</p>;
+  }
+
+  const { summary, items, recent_activities } = overview;
+  const groups: ProjectItemType[] = ["task", "bug", "feature"];
+  const statByType: Record<ProjectItemType, { done: number; total: number }> = {
+    task: { done: summary.tasks_done, total: summary.tasks_done + summary.tasks_open },
+    bug: { done: summary.bugs_done, total: summary.bugs_done + summary.bugs_open },
+    feature: { done: summary.features_done, total: summary.features_done + summary.features_open }
+  };
+
+  return (
+    <div className="project-board">
+      <div className="project-progress">
+        <div className="project-progress-head">
+          <strong>
+            {summary.total_done}/{summary.total_done + summary.total_open} הושלמו
+          </strong>
+          <span>{summary.progress_percent}%</span>
+        </div>
+        <ProgressBar value={summary.progress_percent} accent={accent} />
+        <div className="project-stat-row">
+          {groups.map((type) => (
+            <div className="project-stat" key={type}>
+              {PROJECT_ITEM_META[type].icon}
+              <span>{PROJECT_ITEM_META[type].label}</span>
+              <strong>
+                {statByType[type].done}/{statByType[type].total}
+              </strong>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <form className="project-add" onSubmit={addItem}>
+        <select value={newType} onChange={(event) => setNewType(event.target.value as ProjectItemType)}>
+          {groups.map((type) => (
+            <option key={type} value={type}>
+              {PROJECT_ITEM_META[type].singular}
+            </option>
+          ))}
+        </select>
+        <input value={newTitle} onChange={(event) => setNewTitle(event.target.value)} placeholder="פריט חדש לסגירה" />
+        <button className="project-add-btn" type="submit" disabled={isAdding || !newTitle.trim()}>
+          <Plus size={16} />
+          הוסף
+        </button>
+      </form>
+
+      <div className="project-items">
+        {items.length ? (
+          items.map((item) => {
+            const isDone = item.status === "done";
+            return (
+              <article className={`project-item ${isDone ? "done" : ""}`} key={item.id}>
+                <button
+                  className="project-check"
+                  type="button"
+                  disabled={busyId === item.id}
+                  aria-label={isDone ? "פתח מחדש" : "סמן כהושלם — יירשם כפעולה"}
+                  onClick={() =>
+                    runItemAction(item, () =>
+                      isDone ? updateProjectItem(moduleId, item.id, { status: "todo" }) : completeProjectItem(moduleId, item.id)
+                    )
+                  }
+                >
+                  {isDone ? <Check size={14} strokeWidth={3} /> : null}
+                </button>
+                <Chip accent={accent}>{PROJECT_ITEM_META[item.item_type].singular}</Chip>
+                <span className="project-item-title">{item.title}</span>
+                <button
+                  className="project-del"
+                  type="button"
+                  disabled={busyId === item.id}
+                  onClick={() => runItemAction(item, () => deleteProjectItem(moduleId, item.id))}
+                  aria-label="מחק פריט"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </article>
+            );
+          })
+        ) : (
+          <p className="behavior-empty">אין פריטים עדיין. הוסף task, bug או feature.</p>
+        )}
+      </div>
+
+      {recent_activities.length ? (
+        <div className="project-feed">
+          <h4>פעילות שנרשמה מהמודול</h4>
+          {recent_activities.slice(0, 4).map((activity) => (
+            <div className="project-feed-row" key={activity.id}>
+              <Zap size={13} />
+              <span dir="auto">{activity.title}</span>
+              <small>{formatActivityTime(activity.occurred_at)}</small>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const LEARNING_UNIT_META: Record<LearningUnitType, { label: string; singular: string; icon: React.ReactNode }> = {
+  topic: { label: "Topics", singular: "Topic", icon: <BookOpen size={15} /> },
+  lab: { label: "Labs", singular: "Lab", icon: <FlaskConical size={15} /> },
+  machine: { label: "Machines", singular: "Machine", icon: <Server size={15} /> }
+};
+
+function LearningBoard({ moduleId, accent, onChanged }: { moduleId: string; accent: Accent; onChanged: () => void }) {
+  const [overview, setOverview] = useState<LearningOverview | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [newType, setNewType] = useState<LearningUnitType>("machine");
+  const [newTitle, setNewTitle] = useState("");
+  const [isAdding, setIsAdding] = useState(false);
+  const [studyMinutes, setStudyMinutes] = useState("45");
+  const [isLoggingStudy, setIsLoggingStudy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    getLearningOverview(moduleId)
+      .then((next) => {
+        if (active) {
+          setOverview(next);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [moduleId]);
+
+  async function reload() {
+    setOverview(await getLearningOverview(moduleId));
+    onChanged();
+  }
+
+  async function logStudy(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!overview) {
+      return;
+    }
+    setIsLoggingStudy(true);
+    try {
+      await quickLog({
+        module_id: moduleId,
+        title: `${overview.module.name} study`,
+        activity_type: "study",
+        duration_minutes: toOptionalMinutes(studyMinutes)
+      });
+      await reload();
+    } finally {
+      setIsLoggingStudy(false);
+    }
+  }
+
+  async function addUnit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const title = newTitle.trim();
+    if (!title) {
+      return;
+    }
+    setIsAdding(true);
+    try {
+      await createLearningUnit(moduleId, { unit_type: newType, title });
+      setNewTitle("");
+      await reload();
+    } finally {
+      setIsAdding(false);
+    }
+  }
+
+  async function runUnitAction(unitId: string, action: () => Promise<unknown>) {
+    setBusyId(unitId);
+    try {
+      await action();
+      await reload();
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (isLoading && !overview) {
+    return <p className="behavior-empty">טוען learning…</p>;
+  }
+  if (!overview) {
+    return <p className="behavior-empty">לא ניתן לטעון את המודול.</p>;
+  }
+
+  const { summary, units, recent_activities } = overview;
+  const groups: LearningUnitType[] = ["topic", "lab", "machine"];
+
+  return (
+    <div className="project-board">
+      <div className="project-progress">
+        <div className="project-progress-head">
+          <strong>
+            {summary.learning_units_done}/{summary.learning_units_total} יחידות
+          </strong>
+          <span>{summary.progress_percent}%</span>
+        </div>
+        <ProgressBar value={summary.progress_percent} accent={accent} />
+        <div className="project-stat-row">
+          <div className="project-stat">
+            <Target size={15} />
+            <span>דק׳ השבוע</span>
+            <strong>{summary.study_minutes}</strong>
+          </div>
+          <div className="project-stat">
+            <Activity size={15} />
+            <span>מפגשים</span>
+            <strong>{summary.study_sessions}</strong>
+          </div>
+          <div className="project-stat">
+            <GraduationCap size={15} />
+            <span>יחידות</span>
+            <strong>
+              {summary.learning_units_done}/{summary.learning_units_total}
+            </strong>
+          </div>
+        </div>
+      </div>
+
+      <form className="study-log" onSubmit={logStudy}>
+        <GraduationCap size={16} />
+        <span>למידה היום</span>
+        <input
+          inputMode="numeric"
+          type="number"
+          min="1"
+          value={studyMinutes}
+          onChange={(event) => setStudyMinutes(event.target.value)}
+        />
+        <span className="study-log-unit">דק׳</span>
+        <button className="project-add-btn" type="submit" disabled={isLoggingStudy}>
+          <Plus size={16} />
+          רשום למידה
+        </button>
+      </form>
+
+      <form className="project-add" onSubmit={addUnit}>
+        <select value={newType} onChange={(event) => setNewType(event.target.value as LearningUnitType)}>
+          {groups.map((type) => (
+            <option key={type} value={type}>
+              {LEARNING_UNIT_META[type].singular}
+            </option>
+          ))}
+        </select>
+        <input value={newTitle} onChange={(event) => setNewTitle(event.target.value)} placeholder="יחידה חדשה ללמידה" />
+        <button className="project-add-btn" type="submit" disabled={isAdding || !newTitle.trim()}>
+          <Plus size={16} />
+          הוסף
+        </button>
+      </form>
+
+      <div className="project-items">
+        {units.length ? (
+          units.map((unit) => {
+            const isDone = unit.status === "completed";
+            return (
+              <article className={`project-item ${isDone ? "done" : ""}`} key={unit.id}>
+                <button
+                  className="project-check"
+                  type="button"
+                  disabled={busyId === unit.id}
+                  aria-label={isDone ? "פתח מחדש" : "סמן כהושלם — יירשם כלמידה"}
+                  onClick={() =>
+                    runUnitAction(unit.id, () =>
+                      isDone
+                        ? updateLearningUnit(moduleId, unit.id, { status: "not_started" })
+                        : completeLearningUnit(moduleId, unit.id)
+                    )
+                  }
+                >
+                  {isDone ? <Check size={14} strokeWidth={3} /> : null}
+                </button>
+                <Chip accent={accent}>{LEARNING_UNIT_META[unit.unit_type].singular}</Chip>
+                <span className="project-item-title">{unit.title}</span>
+                <button
+                  className="project-del"
+                  type="button"
+                  disabled={busyId === unit.id}
+                  onClick={() => runUnitAction(unit.id, () => deleteLearningUnit(moduleId, unit.id))}
+                  aria-label="מחק יחידה"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </article>
+            );
+          })
+        ) : (
+          <p className="behavior-empty">אין יחידות עדיין. הוסף topic, lab או machine.</p>
+        )}
+      </div>
+
+      {recent_activities.length ? (
+        <div className="project-feed">
+          <h4>פעילות שנרשמה מהמודול</h4>
+          {recent_activities.slice(0, 4).map((activity) => (
+            <div className="project-feed-row" key={activity.id}>
+              <Zap size={13} />
+              <span dir="auto">{activity.title}</span>
+              <small>
+                {formatActivityTime(activity.occurred_at)} · {activity.duration_minutes ?? 0} דק׳
+              </small>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function WellbeingBoard({ moduleId, accent, onChanged }: { moduleId: string; accent: Accent; onChanged: () => void }) {
+  const [overview, setOverview] = useState<WellbeingOverview | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [duration, setDuration] = useState("30");
+  const [values, setValues] = useState<Record<string, number>>({});
+  const [isLogging, setIsLogging] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    getWellbeingOverview(moduleId)
+      .then((next) => {
+        if (!active) {
+          return;
+        }
+        setOverview(next);
+        setValues(Object.fromEntries(next.metric_defs.map((def) => [def.key, Math.round((def.min + def.max) / 2)])));
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [moduleId]);
+
+  async function logSession(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsLogging(true);
+    try {
+      await logWellbeingSession(moduleId, { duration_minutes: toOptionalMinutes(duration), values });
+      setOverview(await getWellbeingOverview(moduleId));
+      onChanged();
+    } finally {
+      setIsLogging(false);
+    }
+  }
+
+  if (isLoading && !overview) {
+    return <p className="behavior-empty">טוען מודול…</p>;
+  }
+  if (!overview) {
+    return <p className="behavior-empty">לא ניתן לטעון את המודול.</p>;
+  }
+
+  const { metric_defs, summary, recent_sessions, trends } = overview;
+
+  return (
+    <div className="project-board">
+      <div className="wellbeing-headline">
+        <div>
+          <strong>{summary.sessions_week}</strong>
+          <span>מפגשים השבוע</span>
+        </div>
+        <div>
+          <strong>{summary.weekly_minutes}</strong>
+          <span>דק׳ השבוע</span>
+        </div>
+      </div>
+
+      <div className="wellbeing-metrics">
+        {metric_defs.map((def) => {
+          const stat = summary.metrics[def.key];
+          const points = trends[def.key] ?? [];
+          return (
+            <div className="wb-metric" key={def.key}>
+              <div className="wb-metric-head">
+                <span>{def.label}</span>
+                <strong>{stat?.latest ?? "—"}</strong>
+              </div>
+              <small>
+                ממוצע {stat?.avg ?? "—"} · {stat?.count ?? 0} מדידות
+              </small>
+              <div className="wb-trend" aria-hidden="true">
+                {points.length ? (
+                  points.map((value, index) => {
+                    const height = Math.max(8, Math.round(((value - def.min) / (def.max - def.min)) * 100));
+                    return (
+                      <span
+                        className="wb-bar"
+                        key={index}
+                        style={{ height: `${height}%`, background: accentColorVar[accent] }}
+                        title={String(value)}
+                      />
+                    );
+                  })
+                ) : (
+                  <span className="wb-trend-empty">אין מדידות עדיין</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <form className="wellbeing-log" onSubmit={logSession}>
+        <div className="wb-log-head">
+          <span>רישום מפגש</span>
+          <label className="wb-duration">
+            <input
+              inputMode="numeric"
+              type="number"
+              min="1"
+              value={duration}
+              onChange={(event) => setDuration(event.target.value)}
+            />
+            דק׳
+          </label>
+        </div>
+
+        {metric_defs.map((def) => (
+          <label className="wb-slider-row" key={def.key}>
+            <span>
+              {def.label} <small>{def.good === "low" ? "(נמוך = טוב)" : "(גבוה = טוב)"}</small>
+            </span>
+            <input
+              type="range"
+              min={def.min}
+              max={def.max}
+              value={values[def.key] ?? Math.round((def.min + def.max) / 2)}
+              onChange={(event) => setValues((current) => ({ ...current, [def.key]: Number(event.target.value) }))}
+            />
+            <strong>{values[def.key] ?? "—"}</strong>
+          </label>
+        ))}
+
+        <button className="project-add-btn wb-log-btn" type="submit" disabled={isLogging}>
+          <Plus size={16} />
+          רשום מפגש
+        </button>
+      </form>
+
+      {recent_sessions.length ? (
+        <div className="project-feed">
+          <h4>מפגשים אחרונים</h4>
+          {recent_sessions.slice(0, 4).map((session) => (
+            <div className="project-feed-row" key={session.id}>
+              <Zap size={13} />
+              <span dir="auto">{session.title}</span>
+              <small>
+                {formatActivityTime(session.occurred_at)} · {session.duration_minutes ?? 0} דק׳
+              </small>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 const moduleTypes = ["project", "habit", "learning", "recovery", "relationship", "finance", "calendar"] as const;
 const moduleStatuses = ["active", "paused", "completed", "archived"] as const;
 
@@ -1337,13 +1894,15 @@ function ModulesView({
   disciplines,
   isSaving,
   onCreateModule,
-  onUpdateModule
+  onUpdateModule,
+  onChanged
 }: {
   modules: LifeModule[];
   disciplines: Discipline[];
   isSaving: boolean;
   onCreateModule: (payload: ModulePayload) => void;
   onUpdateModule: (moduleId: string, payload: ModuleUpdatePayload) => void;
+  onChanged: () => void;
 }) {
   const [name, setName] = useState("");
   const [type, setType] = useState<(typeof moduleTypes)[number]>("project");
@@ -1437,9 +1996,7 @@ function ModulesView({
       return;
     }
     const editableKeysByType: Record<string, string[]> = {
-      project: ["progress_percent", "tasks_open", "tasks_done", "bugs_open", "bugs_done", "features_open", "features_done"],
-      habit: ["weekly_target"],
-      learning: ["progress_percent", "learning_units_total", "learning_units_done"]
+      habit: ["weekly_target"]
     };
     const keys = editableKeysByType[behavior.type] ?? [];
     const config = Object.fromEntries(keys.map((key) => [key, toConfigNumber(behaviorDraft[key] ?? toNumberDraft(behavior.config[key]))]));
@@ -1472,36 +2029,6 @@ function ModulesView({
       </label>
     );
 
-    if (behavior.type === "project") {
-      return (
-        <>
-          <div className="behavior-stats">
-            <div>
-              <strong>{String(summary.progress_percent ?? 0)}%</strong>
-              <span>Progress</span>
-            </div>
-            <div>
-              <strong>{String(summary.total_open ?? 0)}</strong>
-              <span>Open</span>
-            </div>
-            <div>
-              <strong>{String(summary.total_done ?? 0)}</strong>
-              <span>Done</span>
-            </div>
-          </div>
-          <div className="behavior-grid">
-            {input("progress_percent", "Progress %")}
-            {input("tasks_open", "Tasks open")}
-            {input("tasks_done", "Tasks done")}
-            {input("bugs_open", "Bugs open")}
-            {input("bugs_done", "Bugs done")}
-            {input("features_open", "Features open")}
-            {input("features_done", "Features done")}
-          </div>
-        </>
-      );
-    }
-
     if (behavior.type === "habit") {
       return (
         <>
@@ -1520,32 +2047,6 @@ function ModulesView({
             </div>
           </div>
           <div className="behavior-grid compact">{input("weekly_target", "Weekly target")}</div>
-        </>
-      );
-    }
-
-    if (behavior.type === "learning") {
-      return (
-        <>
-          <div className="behavior-stats">
-            <div>
-              <strong>{String(summary.study_minutes ?? 0)}</strong>
-              <span>Study min</span>
-            </div>
-            <div>
-              <strong>{String(summary.learning_units_done ?? 0)}</strong>
-              <span>Units done</span>
-            </div>
-            <div>
-              <strong>{String(summary.progress_percent ?? 0)}%</strong>
-              <span>Progress</span>
-            </div>
-          </div>
-          <div className="behavior-grid">
-            {input("progress_percent", "Progress %")}
-            {input("learning_units_total", "Units total")}
-            {input("learning_units_done", "Units done")}
-          </div>
         </>
       );
     }
@@ -1678,19 +2179,49 @@ function ModulesView({
           <div className="panel-content">
             <header className="panel-header">
               <div>
-                <span className="panel-eyebrow">MVP Behavior</span>
+                <span className="panel-eyebrow">
+                  {selectedModule?.type === "project"
+                    ? "Project board · live"
+                    : selectedModule?.type === "learning"
+                      ? "Learning board · live"
+                      : selectedModule?.type === "recovery" || selectedModule?.type === "relationship"
+                        ? "Sessions · live"
+                        : "MVP Behavior"}
+                </span>
                 <h2>{selectedModule ? selectedModule.name : "Module behavior"}</h2>
               </div>
               {selectedModule ? <Chip accent={accentForSlug(disciplines.find((discipline) => discipline.id === selectedModule.discipline_id)?.slug)}>{moduleTypeLabel(selectedModule.type)}</Chip> : null}
             </header>
 
-            {renderBehaviorFields()}
+            {selectedModule?.type === "project" ? (
+              <ProjectBoard
+                moduleId={selectedModule.id}
+                accent={accentForSlug(disciplines.find((discipline) => discipline.id === selectedModule.discipline_id)?.slug)}
+                onChanged={onChanged}
+              />
+            ) : selectedModule?.type === "learning" ? (
+              <LearningBoard
+                moduleId={selectedModule.id}
+                accent={accentForSlug(disciplines.find((discipline) => discipline.id === selectedModule.discipline_id)?.slug)}
+                onChanged={onChanged}
+              />
+            ) : selectedModule?.type === "recovery" || selectedModule?.type === "relationship" ? (
+              <WellbeingBoard
+                moduleId={selectedModule.id}
+                accent={accentForSlug(disciplines.find((discipline) => discipline.id === selectedModule.discipline_id)?.slug)}
+                onChanged={onChanged}
+              />
+            ) : (
+              <>
+                {renderBehaviorFields()}
 
-            {behavior && ["project", "habit", "learning"].includes(behavior.type) ? (
-              <button className="quick-submit" type="button" onClick={saveBehavior}>
-                שמור Behavior
-              </button>
-            ) : null}
+                {behavior && behavior.type === "habit" ? (
+                  <button className="quick-submit" type="button" onClick={saveBehavior}>
+                    שמור Behavior
+                  </button>
+                ) : null}
+              </>
+            )}
           </div>
         </section>
       </div>
@@ -1704,6 +2235,12 @@ function severityAccent(severity: string): Accent {
   if (severity === "critical") return "red";
   if (severity === "warning") return "orange";
   return "blue";
+}
+
+function severityLabel(severity: string): string {
+  if (severity === "critical") return "דחוף";
+  if (severity === "warning") return "דורש תשומת לב";
+  return "המלצה";
 }
 
 function Modal({
@@ -2205,6 +2742,7 @@ export function App() {
             isSaving={isSavingModule}
             onCreateModule={handleCreateModule}
             onUpdateModule={handleUpdateModule}
+            onChanged={refreshModulesAndDashboard}
           />
         ) : null}
       </main>

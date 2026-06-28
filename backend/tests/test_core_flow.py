@@ -11,6 +11,123 @@ from app.main import app  # noqa: E402
 
 
 class CoreFlowTest(unittest.TestCase):
+    def test_project_items_drive_progress(self) -> None:
+        with TestClient(app) as client:
+            modules = {item["slug"]: item for item in client.get("/api/v1/modules").json()}
+            project_id = modules["parknet"]["id"]
+
+            overview = client.get(f"/api/v1/project/{project_id}/overview")
+            self.assertEqual(overview.status_code, 200)
+            body = overview.json()
+            # No fabricated seed content — a fresh project module starts empty.
+            self.assertEqual(len(body["items"]), 0)
+            before = body["summary"]
+            self.assertIn("progress_percent", before)
+
+            # A non-project module has no project board.
+            self.assertEqual(client.get(f"/api/v1/project/{modules['gym']['id']}/overview").status_code, 422)
+
+            created = client.post(
+                f"/api/v1/project/{project_id}/items",
+                json={"item_type": "task", "title": "Wire up integration tests"},
+            )
+            self.assertEqual(created.status_code, 201)
+            self.assertEqual(created.json()["status"], "todo")
+            item_id = created.json()["id"]
+
+            # Completing work closes the item AND logs a real activity (the honest loop).
+            completed = client.post(
+                f"/api/v1/project/{project_id}/items/{item_id}/complete",
+                json={"duration_minutes": 20},
+            )
+            self.assertEqual(completed.status_code, 200)
+            self.assertEqual(completed.json()["status"], "done")
+            activity_id = completed.json()["completed_activity_id"]
+            self.assertIsNotNone(activity_id)
+
+            module_activities = client.get(f"/api/v1/activities?module_id={project_id}").json()
+            self.assertTrue(any(item["id"] == activity_id for item in module_activities))
+
+            after = client.get(f"/api/v1/project/{project_id}/overview").json()["summary"]
+            self.assertEqual(after["tasks_done"], before["tasks_done"] + 1)
+
+            # Re-completing an already-done item is rejected.
+            self.assertEqual(
+                client.post(f"/api/v1/project/{project_id}/items/{item_id}/complete", json={}).status_code,
+                409,
+            )
+
+    def test_learning_units_drive_progress(self) -> None:
+        with TestClient(app) as client:
+            modules = {item["slug"]: item for item in client.get("/api/v1/modules").json()}
+            learning_id = modules["oscp"]["id"]
+
+            overview = client.get(f"/api/v1/learning/{learning_id}/overview")
+            self.assertEqual(overview.status_code, 200)
+            body = overview.json()
+            # No fabricated seed content — a fresh learning module starts empty.
+            self.assertEqual(len(body["units"]), 0)
+            before = body["summary"]
+            self.assertIn("learning_units_total", before)
+            self.assertIn("study_minutes", before)
+
+            # A non-learning module has no learning board.
+            self.assertEqual(client.get(f"/api/v1/learning/{modules['parknet']['id']}/overview").status_code, 422)
+
+            created = client.post(
+                f"/api/v1/learning/{learning_id}/units",
+                json={"unit_type": "machine", "title": "HTB: Bashed"},
+            )
+            self.assertEqual(created.status_code, 201)
+            self.assertEqual(created.json()["status"], "not_started")
+            unit_id = created.json()["id"]
+
+            # Completing a unit logs real study time (the honest loop).
+            completed = client.post(
+                f"/api/v1/learning/{learning_id}/units/{unit_id}/complete",
+                json={"duration_minutes": 45},
+            )
+            self.assertEqual(completed.status_code, 200)
+            self.assertEqual(completed.json()["status"], "completed")
+            self.assertIsNotNone(completed.json()["completed_activity_id"])
+
+            after = client.get(f"/api/v1/learning/{learning_id}/overview").json()["summary"]
+            self.assertEqual(after["learning_units_done"], before["learning_units_done"] + 1)
+            self.assertEqual(after["study_minutes"], before["study_minutes"] + 45)
+
+            self.assertEqual(
+                client.post(f"/api/v1/learning/{learning_id}/units/{unit_id}/complete", json={}).status_code,
+                409,
+            )
+
+    def test_wellbeing_sessions_record_metrics(self) -> None:
+        with TestClient(app) as client:
+            modules = {item["slug"]: item for item in client.get("/api/v1/modules").json()}
+            recovery_id = modules["recovery"]["id"]
+
+            overview = client.get(f"/api/v1/wellbeing/{recovery_id}/overview")
+            self.assertEqual(overview.status_code, 200)
+            self.assertEqual([definition["key"] for definition in overview.json()["metric_defs"]], ["pain", "mobility"])
+
+            # A module that isn't a wellbeing type has no session log.
+            self.assertEqual(client.get(f"/api/v1/wellbeing/{modules['parknet']['id']}/overview").status_code, 422)
+
+            logged = client.post(
+                f"/api/v1/wellbeing/{recovery_id}/session",
+                json={"duration_minutes": 30, "values": {"pain": 4, "mobility": 6}},
+            )
+            self.assertEqual(logged.status_code, 201)
+            self.assertCountEqual(logged.json()["metrics_recorded"], ["pain", "mobility"])
+
+            after = client.get(f"/api/v1/wellbeing/{recovery_id}/overview").json()
+            self.assertEqual(after["summary"]["sessions_week"], 1)
+            self.assertEqual(after["summary"]["metrics"]["pain"]["latest"], 4)
+
+            # The session created a real activity and real metric rows (not config).
+            module_activities = client.get(f"/api/v1/activities?module_id={recovery_id}").json()
+            self.assertTrue(any(item["module_id"] == recovery_id for item in module_activities))
+            self.assertEqual(len(client.get(f"/api/v1/metrics?module_id={recovery_id}").json()), 2)
+
     def test_seeded_quick_log_and_dashboard(self) -> None:
         with TestClient(app) as client:
             health = client.get("/health")
