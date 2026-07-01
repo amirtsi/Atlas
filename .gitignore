@@ -20,3 +20,4 @@ frontend/vite.config.d.ts
 
 backend/.venv/
 backend/data/
+.superpowers/
