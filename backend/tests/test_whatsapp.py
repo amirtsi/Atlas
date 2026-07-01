@@ -260,5 +260,49 @@ class WhatsAppTwoWayTest(unittest.TestCase):
             self.assertTrue(any(item["id"] == body["message_id"] for item in messages))
 
 
+    def test_owner_question_gets_coach_reply_not_activity(self) -> None:
+        # A question must NOT create an activity, but must get a reply (coach path).
+        with TestClient(app) as client:
+            modules = {item["slug"]: item for item in client.get("/api/v1/modules").json()}
+            recovery_id = modules["recovery"]["id"]
+            provider = _make_provider(client, {"dry_run": True, "instance": "atlas"})
+
+            before_activities = _whatsapp_activity_count(client, recovery_id)
+            before_replies = _auto_reply_count(client, provider["id"])
+
+            webhook = client.post(
+                f"/api/v1/communication/providers/{provider['id']}/webhooks/evolution",
+                json=_webhook_payload(OWNER, "מה עשיתי השבוע?", key_id="q-1"),
+            )
+            self.assertEqual(webhook.status_code, 202)
+            classification = webhook.json()["classification"]
+            self.assertIsNotNone(classification)
+            self.assertFalse(classification["matched"])
+            self.assertIsNone(classification["activity_id"])
+            self.assertTrue(classification["method"].startswith("coach:"))
+
+            self.assertEqual(_whatsapp_activity_count(client, recovery_id), before_activities)
+            self.assertEqual(_auto_reply_count(client, provider["id"]), before_replies + 1)
+
+    def test_log_message_still_logs_after_coach_wiring(self) -> None:
+        # Regression: a plain log statement still classifies + logs, not answered.
+        with TestClient(app) as client:
+            modules = {item["slug"]: item for item in client.get("/api/v1/modules").json()}
+            recovery_id = modules["recovery"]["id"]
+            provider = _make_provider(client, {"dry_run": True, "instance": "atlas"})
+
+            before_activities = _whatsapp_activity_count(client, recovery_id)
+
+            webhook = client.post(
+                f"/api/v1/communication/providers/{provider['id']}/webhooks/evolution",
+                json=_webhook_payload(OWNER, "עשיתי פיזיותרפיה 30 דקות", key_id="log-1"),
+            )
+            self.assertEqual(webhook.status_code, 202)
+            classification = webhook.json()["classification"]
+            self.assertTrue(classification["matched"])
+            self.assertEqual(classification["module_id"], recovery_id)
+            self.assertEqual(_whatsapp_activity_count(client, recovery_id), before_activities + 1)
+
+
 if __name__ == "__main__":
     unittest.main()

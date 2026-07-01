@@ -4,12 +4,14 @@ from app.core.config import get_settings
 from app.core.database import db_connection, new_id, rows_to_dicts
 from app.core.time import utc_now_iso
 from app.modules.activity_ledger.service import insert_activity
+from app.modules.coach.service import answer_question
 from app.modules.communication.classifier import classify_message
 from app.modules.communication.evolution import (
     normalize_webhook_payload,
     normalize_whatsapp_number,
     send_text_message,
 )
+from app.modules.communication.intent import classify_intent
 from app.modules.dashboard.service import get_today_dashboard
 from app.shared.audit import record_audit_event
 from app.shared.schemas import (
@@ -221,8 +223,46 @@ def _send_and_store_reply(conn, provider: dict, recipient: str, text: str, *, in
 
 
 def _handle_owner_message(conn, provider: dict, inbound_message_id: str | None, normalized: dict, sender: str, now: str) -> dict:
-    """Classify an owner message, log a real activity only when confident, and reply."""
-    result = classify_message(conn, provider, normalized["content_text"])
+    """Answer owner questions from real data; otherwise classify + log when confident."""
+    text = normalized["content_text"]
+    settings = get_settings()
+
+    if settings.coach_enabled and classify_intent(text) == "question":
+        coach = answer_question(text)
+        reply_message_id = _send_and_store_reply(conn, provider, sender, coach["answer"], in_reply_to=inbound_message_id)
+        if inbound_message_id:
+            conn.execute(
+                "UPDATE communication_messages SET metadata = ?, updated_at = ? WHERE id = ?",
+                (
+                    json_dump(
+                        {
+                            "raw_event_type": normalized["event_type"],
+                            "intent": "question",
+                            "ai_generated": True,
+                            "coach_method": coach["method"],
+                        }
+                    ),
+                    now,
+                    inbound_message_id,
+                ),
+            )
+        return {
+            "matched": False,
+            "module_id": None,
+            "module_name": None,
+            "discipline_id": None,
+            "activity_type": None,
+            "title": None,
+            "duration_minutes": None,
+            "confidence": 0.0,
+            "method": f"coach:{coach['method']}",
+            "intent": "question",
+            "reply_text": coach["answer"],
+            "activity_id": None,
+            "reply_message_id": reply_message_id,
+        }
+
+    result = classify_message(conn, provider, text)
 
     activity_id = None
     if result["matched"]:
