@@ -37,4 +37,4 @@ def test_coach_settings_have_defaults():
 
     settings = Settings()
     assert settings.coach_enabled is True
-    assert settings.coach_model
+    assert settings.coach_model == "claude-haiku-4-5"

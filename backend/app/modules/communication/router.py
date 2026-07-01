@@ -341,9 +341,25 @@ def _already_recorded(conn, provider_id: str, provider_message_id: str | None) -
 
 
 def _looks_like_atlas_reply(text: str | None) -> bool:
-    """Backup loop guard for when the bounced message carries no provider id."""
+    """Cheap backup loop guard: our confirmation/brief replies start with ✅/☀️."""
     stripped = (text or "").lstrip()
     return stripped.startswith("✅") or stripped.startswith("☀️")
+
+
+def _matches_recent_outbound(conn, provider_id: str, text: str | None) -> bool:
+    """Backup loop guard for bounced replies that carry no/unmatched provider id.
+
+    Coach answers are arbitrary text (no ✅/☀️ prefix), so the prefix check misses
+    them. A fromMe message whose text equals one we already sent is our own reply
+    bouncing back — skip it (prevents re-processing and re-triggering the coach)."""
+    if not text:
+        return False
+    row = conn.execute(
+        "SELECT 1 FROM communication_messages "
+        "WHERE provider_id = ? AND direction = 'outbound' AND content_text = ? LIMIT 1",
+        (provider_id, text),
+    ).fetchone()
+    return row is not None
 
 
 @router.post("/providers/{provider_id}/webhooks/evolution", status_code=202)
@@ -374,7 +390,9 @@ def receive_evolution_webhook(provider_id: str, payload: dict, request: Request,
         # (Evolution re-deliveries and our own outbound replies bouncing back),
         # with a text-prefix fallback for replies that carry no provider id.
         already_seen = _already_recorded(conn, provider_id, normalized["provider_message_id"])
-        is_self_reply = _looks_like_atlas_reply(normalized["content_text"])
+        is_self_reply = _looks_like_atlas_reply(normalized["content_text"]) or _matches_recent_outbound(
+            conn, provider_id, normalized["content_text"]
+        )
 
         message_id = None
         if normalized["content_text"] and not already_seen:

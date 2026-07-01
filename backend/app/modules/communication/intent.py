@@ -6,8 +6,6 @@ a LOG (hand to the activity classifier), or OTHER (empty/unusable). Bias: only
 word. Everything else is "log", so the activity classifier stays the authority on
 whether a message maps to a module.
 """
-from __future__ import annotations
-
 import re
 
 # "?" anywhere, an English question word, or a Hebrew question word as a whole
