@@ -17,7 +17,7 @@ from app.core.config import get_settings
 from app.core.database import db_connection, rows_to_dicts
 from app.core.time import utc_now_iso
 from app.modules.communication.evolution import normalize_whatsapp_number
-from app.modules.dashboard.router import get_today_dashboard
+from app.modules.dashboard.service import get_today_dashboard
 from app.shared.audit import record_audit_event
 
 logger = logging.getLogger("atlas.scheduler")

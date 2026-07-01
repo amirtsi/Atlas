@@ -3,6 +3,9 @@ from fastapi import APIRouter, HTTPException
 from app.core.config import get_settings
 from app.core.database import db_connection, new_id, row_to_dict, rows_to_dicts
 from app.core.time import to_utc_iso, utc_now_iso
+
+# The validated write path lives in the service layer; the routes below call it.
+from app.modules.activity_ledger.service import insert_activity
 from app.shared.audit import record_audit_event
 from app.shared.schemas import (
     ActivityCreate,
@@ -60,57 +63,10 @@ def list_activities(
         return rows_to_dicts(conn.execute(sql, params).fetchall())
 
 
-def _insert_activity(conn, payload: ActivityCreate) -> dict:
-    now = utc_now_iso()
-    activity_id = new_id()
-    # Normalize to tz-aware UTC; a naive client value is read as the local timezone.
-    occurred_at = to_utc_iso(payload.occurred_at, assume_tz=get_settings().timezone) or now
-    if payload.discipline_id:
-        get_or_404(conn, "disciplines", payload.discipline_id)
-    if payload.module_id:
-        module = get_or_404(conn, "life_modules", payload.module_id)
-        if payload.discipline_id is None:
-            payload.discipline_id = module["discipline_id"]
-    conn.execute(
-        """
-        INSERT INTO activities
-          (id, discipline_id, module_id, activity_type, title, notes, occurred_at,
-           duration_minutes, energy_level, mood_level, source, metadata, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            activity_id,
-            payload.discipline_id,
-            payload.module_id,
-            payload.activity_type,
-            payload.title,
-            payload.notes,
-            occurred_at,
-            payload.duration_minutes,
-            payload.energy_level,
-            payload.mood_level,
-            payload.source,
-            json_dump(payload.metadata),
-            now,
-            now,
-        ),
-    )
-    activity = get_or_404(conn, "activities", activity_id)
-    record_audit_event(
-        conn,
-        entity_type="activity",
-        entity_id=activity_id,
-        action="created",
-        summary=f"Logged activity: {activity['title']}",
-        changes={"title": activity["title"], "source": activity["source"], "module_id": activity["module_id"]},
-    )
-    return activity
-
-
 @router.post("/activities", status_code=201)
 def create_activity(payload: ActivityCreate) -> dict:
     with db_connection() as conn:
-        return _insert_activity(conn, payload)
+        return insert_activity(conn, payload)
 
 
 @router.post("/activities/quick-log", status_code=201)
@@ -128,7 +84,7 @@ def quick_log(payload: QuickLogCreate) -> dict:
                 source="quick_log",
                 metadata={**(template.get("default_metadata") or {}), **payload.metadata},
             )
-            return _insert_activity(conn, activity)
+            return insert_activity(conn, activity)
 
         if not payload.title or not payload.activity_type:
             raise HTTPException(status_code=422, detail="title and activity_type are required without template_id")
@@ -142,7 +98,7 @@ def quick_log(payload: QuickLogCreate) -> dict:
             source="quick_log",
             metadata=payload.metadata,
         )
-        return _insert_activity(conn, activity)
+        return insert_activity(conn, activity)
 
 
 @router.get("/activities/{activity_id}")

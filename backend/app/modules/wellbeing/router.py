@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.core.database import db_connection, new_id, rows_to_dicts
 from app.core.time import utc_now_iso
-from app.modules.activity_ledger.router import _insert_activity
+from app.modules.activity_ledger.service import insert_activity
 from app.modules.life_modules.behavior import WELLBEING_TYPES, build_behavior
 from app.shared.audit import record_audit_event
 from app.shared.schemas import ActivityCreate, WellbeingSessionCreate
@@ -67,7 +67,7 @@ def log_session(module_id: str, payload: WellbeingSessionCreate) -> dict:
         config = WELLBEING_TYPES[module["type"]]
         definitions = {definition["key"]: definition for definition in config["metrics"]}
 
-        activity = _insert_activity(
+        activity = insert_activity(
             conn,
             ActivityCreate(
                 module_id=module_id,

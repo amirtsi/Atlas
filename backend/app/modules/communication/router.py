@@ -3,14 +3,14 @@ from fastapi import APIRouter, HTTPException, Request
 from app.core.config import get_settings
 from app.core.database import db_connection, new_id, rows_to_dicts
 from app.core.time import utc_now_iso
-from app.modules.activity_ledger.router import _insert_activity
+from app.modules.activity_ledger.service import insert_activity
 from app.modules.communication.classifier import classify_message
 from app.modules.communication.evolution import (
     normalize_webhook_payload,
     normalize_whatsapp_number,
     send_text_message,
 )
-from app.modules.dashboard.router import get_today_dashboard
+from app.modules.dashboard.service import get_today_dashboard
 from app.shared.audit import record_audit_event
 from app.shared.schemas import (
     ActivityCreate,
@@ -224,7 +224,7 @@ def _handle_owner_message(conn, provider: dict, inbound_message_id: str | None, 
 
     activity_id = None
     if result["matched"]:
-        activity = _insert_activity(
+        activity = insert_activity(
             conn,
             ActivityCreate(
                 module_id=result["module_id"],

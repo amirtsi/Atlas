@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.core.database import db_connection, new_id, row_to_dict, rows_to_dicts
 from app.core.time import utc_now_iso
-from app.modules.activity_ledger.router import _insert_activity
+from app.modules.activity_ledger.service import insert_activity
 from app.modules.life_modules.behavior import build_behavior
 from app.shared.audit import record_audit_event
 from app.shared.schemas import ActivityCreate, ProjectItemComplete, ProjectItemCreate, ProjectItemUpdate
@@ -183,7 +183,7 @@ def complete_item(module_id: str, item_id: str, payload: ProjectItemComplete) ->
 
         activity_id = None
         if payload.log_activity:
-            activity = _insert_activity(
+            activity = insert_activity(
                 conn,
                 ActivityCreate(
                     module_id=module_id,
