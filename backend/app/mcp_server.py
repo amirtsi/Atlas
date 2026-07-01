@@ -177,6 +177,8 @@ WRITE_TOOLS = [
 for _tool in WRITE_TOOLS:
     server.tool()(_tool)
 
+TOOL_NAMES = sorted(_tool.__name__ for _tool in [*READ_TOOLS, *WRITE_TOOLS])
+
 
 def main() -> None:
     """Serve the MCP server over stdio."""
