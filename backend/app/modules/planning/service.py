@@ -9,6 +9,7 @@ from sqlite3 import Connection
 
 from app.core.database import new_id
 from app.core.time import utc_now_iso
+from app.modules.proposals.service import register_proposal_handler
 from app.shared.audit import record_audit_event
 from app.shared.schemas import GoalCreate
 from app.shared.sql import get_or_404
@@ -73,3 +74,31 @@ def evaluate_step(conn: Connection, step: dict) -> dict:
     ratio = min(1.0, done / target) if target else 0.0
     status = "done" if target and done >= target else "in_progress" if done else "pending"
     return {"done": done, "target": target, "ratio": ratio, "status": status, "last_activity_at": last}
+
+
+def _activate_plan_handler(conn: Connection, payload: dict) -> dict:
+    plan_id = payload["plan_id"]
+    plan = get_or_404(conn, "plans", plan_id)
+    now = utc_now_iso()
+    goal_id = plan["goal_id"]
+    conn.execute(
+        "UPDATE plans SET status = 'superseded', superseded_at = ? WHERE goal_id = ? AND status = 'active'",
+        (now, goal_id),
+    )
+    conn.execute(
+        "UPDATE plans SET status = 'active', activated_at = ? WHERE id = ?",
+        (now, plan_id),
+    )
+    conn.execute(
+        "UPDATE goals SET active_plan_id = ?, status = 'active', updated_at = ? WHERE id = ?",
+        (plan_id, now, goal_id),
+    )
+    updated = get_or_404(conn, "plans", plan_id)
+    record_audit_event(
+        conn, entity_type="plan", entity_id=plan_id, action="activated",
+        summary=f"Plan activated for goal {goal_id}", changes={"goal_id": goal_id},
+    )
+    return updated
+
+
+register_proposal_handler("activate_plan", _activate_plan_handler)
