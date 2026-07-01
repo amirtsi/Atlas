@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 from app import mcp_server
@@ -24,6 +25,14 @@ def test_tool_set_is_exactly_the_allowed_surface():
 def test_no_forbidden_mutating_tools_exposed():
     for name in mcp_server.TOOL_NAMES:
         assert not any(bad in name for bad in FORBIDDEN_SUBSTRINGS), name
+
+
+def test_registry_matches_declared_tool_names():
+    # Harden the guard: assert against what FastMCP actually registered, not just
+    # the declared lists — catches a tool added via a direct @server.tool()
+    # decorator that bypassed READ_TOOLS/WRITE_TOOLS.
+    registered = {tool.name for tool in asyncio.run(mcp_server.server.list_tools())}
+    assert registered == ALLOWED
 
 
 def test_main_module_does_not_import_mcp_server():
