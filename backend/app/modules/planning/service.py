@@ -48,7 +48,7 @@ def create_goal(conn: Connection, payload: GoalCreate) -> dict:
     return goal
 
 
-def evaluate_step(conn: Connection, step: dict) -> dict:
+def evaluate_step(conn: Connection, step: dict, since: str | None = None) -> dict:
     """Derive a step's progress from real activities (or explicit links). Never stored."""
     rule = step.get("completion_rule") or {}
     rtype = rule.get("type", "duration")
@@ -68,6 +68,9 @@ def evaluate_step(conn: Connection, step: dict) -> dict:
             where.append("(LOWER(a.title) LIKE ? OR LOWER(COALESCE(a.notes, '')) LIKE ?)")
             like = f"%{str(rule['match']).lower()}%"
             params.extend([like, like])
+        if since:
+            where.append("a.occurred_at >= ?")
+            params.append(since)
         agg = "COALESCE(SUM(a.duration_minutes), 0)" if rtype == "duration" else "COUNT(a.id)"
         row = conn.execute(
             f"SELECT {agg} AS v, MAX(a.occurred_at) AS last FROM activities a WHERE {' AND '.join(where)}",
@@ -168,7 +171,9 @@ def decompose_goal(goal: dict) -> dict | None:
 def _completion_rule(goal: dict, step_spec: dict) -> dict:
     unit = step_spec.get("unit", "minutes")
     match = str(step_spec.get("match") or step_spec.get("title") or "").lower().strip()
-    rule: dict = {"module_id": goal.get("module_id"), "match": match}
+    rule: dict = {"module_id": goal.get("module_id")}
+    if match:
+        rule["match"] = match
     if unit == "count":
         rule["type"] = "count"
         rule["target_count"] = int(step_spec.get("target") or 1)
@@ -194,8 +199,9 @@ def get_goal_plan(conn: Connection, goal_id: str) -> dict | None:
     steps = rows_to_dicts(
         conn.execute("SELECT * FROM plan_steps WHERE plan_id = ? ORDER BY sequence, created_at", (plan_id,)).fetchall()
     )
+    since = plan["activated_at"] if plan["status"] == "active" else None
     for step in steps:
-        step["progress"] = evaluate_step(conn, step)
+        step["progress"] = evaluate_step(conn, step, since=since)
     done = sum(1 for s in steps if s["progress"]["status"] == "done")
     overall = round(100 * done / len(steps)) if steps else 0
     return {"goal": goal, "plan": plan, "steps": steps, "overall_percent": overall}
@@ -205,6 +211,8 @@ def propose_plan_for_goal(conn: Connection, goal_id: str) -> dict:
     from app.modules.proposals.service import create_proposal
 
     goal = get_or_404(conn, "goals", goal_id)
+    if not goal.get("module_id"):
+        raise HTTPException(status_code=422, detail="Goal needs a module before planning")
     decomposed = decompose_goal(goal)
     if not decomposed:
         raise HTTPException(status_code=422, detail="Plan decomposition unavailable (needs AI key)")
