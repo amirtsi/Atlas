@@ -6,6 +6,7 @@ is advisory (proposed via the P1 inbox); the position is a query over the ledger
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from sqlite3 import Connection
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -204,7 +205,8 @@ def get_goal_plan(conn: Connection, goal_id: str) -> dict | None:
         step["progress"] = evaluate_step(conn, step, since=since)
     done = sum(1 for s in steps if s["progress"]["status"] == "done")
     overall = round(100 * done / len(steps)) if steps else 0
-    return {"goal": goal, "plan": plan, "steps": steps, "overall_percent": overall}
+    drift = compute_drift(goal, plan, overall / 100)
+    return {"goal": goal, "plan": plan, "steps": steps, "overall_percent": overall, "drift": drift}
 
 
 def propose_plan_for_goal(conn: Connection, goal_id: str) -> dict:
@@ -243,3 +245,36 @@ def propose_plan_for_goal(conn: Connection, goal_id: str) -> dict:
     )
     conn.execute("UPDATE plans SET source_proposal_id = ? WHERE id = ?", (proposal["id"], plan_id))
     return proposal
+
+
+def _parse_iso(value: str | None):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def compute_drift(goal: dict, plan: dict, actual_percent: float) -> dict | None:
+    target = _parse_iso(goal.get("target_date"))
+    activated = _parse_iso(plan.get("activated_at"))
+    if target is None or activated is None:
+        return None
+    now = datetime.now(UTC)
+    horizon = (target - activated).total_seconds()
+    if horizon <= 0:
+        return None
+    elapsed = max(0.0, (now - activated).total_seconds())
+    expected = min(1.0, elapsed / horizon)
+    drift = round(actual_percent - expected, 3)
+    projected = None
+    if actual_percent > 0:
+        projected = (activated + (now - activated) / actual_percent).isoformat()
+    return {
+        "expected_percent": round(expected, 3),
+        "actual_percent": round(actual_percent, 3),
+        "drift": drift,
+        "projected_completion": projected,
+        "on_track": drift >= -0.15,
+    }
