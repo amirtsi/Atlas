@@ -340,3 +340,23 @@ def compute_drift(goal: dict, plan: dict, actual_percent: float) -> dict | None:
         "projected_completion": projected,
         "on_track": drift >= -0.15,
     }
+
+
+def active_goal_brief_line(conn: Connection) -> str | None:
+    """Forward line for the daily brief: the most recently activated goal's next step + drift."""
+    row = conn.execute(
+        "SELECT g.id FROM goals g JOIN plans p ON p.id = g.active_plan_id "
+        "WHERE g.status = 'active' ORDER BY p.activated_at DESC LIMIT 1"
+    ).fetchone()
+    if row is None:
+        return None
+    view = get_goal_plan(conn, row["id"])
+    if not view:
+        return None
+    pending = [s for s in view["steps"] if s["progress"]["status"] != "done"]
+    if not pending:
+        return None
+    nxt = min(pending, key=lambda s: s.get("sequence", 0))
+    drift = view["drift"]
+    note = "" if drift is None else (" · on track" if drift["on_track"] else " · behind — consider re-planning")
+    return f"🎯 {view['goal']['title']}: next — {nxt['title']}{note}"

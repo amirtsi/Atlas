@@ -13,6 +13,7 @@ from app.modules.communication.evolution import (
 )
 from app.modules.communication.intent import classify_intent
 from app.modules.dashboard.service import get_today_dashboard
+from app.modules.planning.service import active_goal_brief_line
 from app.shared.audit import record_audit_event
 from app.shared.schemas import (
     ActivityCreate,
@@ -472,6 +473,11 @@ def _compose_daily_brief(dashboard: dict) -> str:
         f"השבוע: {signals.get('week_activity_count', 0)} פעולות · "
         f"{signals.get('week_duration_minutes', 0)} דק׳"
     )
+    from app.core.database import db_connection
+    with db_connection() as conn:
+        plan_line = active_goal_brief_line(conn)
+    if plan_line:
+        lines.append(plan_line)
     return "\n\n".join(lines)
 
 
