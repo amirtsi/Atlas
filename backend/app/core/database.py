@@ -8,7 +8,6 @@ from uuid import uuid4
 from app.core.config import get_settings
 from app.core.time import utc_now_iso
 
-
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS disciplines (
   id TEXT PRIMARY KEY,
@@ -86,6 +85,34 @@ CREATE TABLE IF NOT EXISTS activity_templates (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS project_items (
+  id TEXT PRIMARY KEY,
+  module_id TEXT NOT NULL REFERENCES life_modules(id),
+  item_type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  status TEXT NOT NULL DEFAULT 'todo',
+  priority INTEGER NOT NULL DEFAULT 3,
+  due_date TEXT,
+  completed_at TEXT,
+  completed_activity_id TEXT REFERENCES activities(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS learning_units (
+  id TEXT PRIMARY KEY,
+  module_id TEXT NOT NULL REFERENCES life_modules(id),
+  unit_type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'not_started',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  completed_at TEXT,
+  completed_activity_id TEXT REFERENCES activities(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS audit_events (
   id TEXT PRIMARY KEY,
   entity_type TEXT NOT NULL,
@@ -150,6 +177,12 @@ CREATE INDEX IF NOT EXISTS idx_metrics_activity_id ON metrics(activity_id);
 CREATE INDEX IF NOT EXISTS idx_activity_templates_module_id ON activity_templates(module_id);
 CREATE INDEX IF NOT EXISTS idx_activity_templates_discipline_id ON activity_templates(discipline_id);
 
+CREATE INDEX IF NOT EXISTS idx_project_items_module_id ON project_items(module_id);
+CREATE INDEX IF NOT EXISTS idx_project_items_status ON project_items(status);
+
+CREATE INDEX IF NOT EXISTS idx_learning_units_module_id ON learning_units(module_id);
+CREATE INDEX IF NOT EXISTS idx_learning_units_status ON learning_units(status);
+
 CREATE INDEX IF NOT EXISTS idx_audit_events_created_at ON audit_events(created_at);
 CREATE INDEX IF NOT EXISTS idx_audit_events_entity ON audit_events(entity_type, entity_id);
 
@@ -166,6 +199,11 @@ def _connect(path: Path | None = None) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    # WAL lets readers and a writer coexist; busy_timeout makes a briefly-locked
+    # DB wait-and-retry instead of raising "database is locked". Both matter as the
+    # webhook, the scheduler, the UI (and soon the MCP/Hermes layer) write concurrently.
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 5000")
     return conn
 
 
@@ -182,9 +220,45 @@ def db_connection() -> Iterator[sqlite3.Connection]:
         conn.close()
 
 
+# --------------------------------------------------------------------------- #
+# Schema versioning / migrations
+#
+# SCHEMA_SQL above is the idempotent baseline (all CREATE TABLE IF NOT EXISTS) and
+# is safe to run on every startup. That covers NEW tables for free. But adding a
+# column to (or otherwise ALTERing) an EXISTING table is NOT covered by IF NOT
+# EXISTS — it would silently never apply to an already-created DB, which is
+# dangerous for the honest-core data. So we track a schema version in the SQLite
+# `PRAGMA user_version` and run ordered, one-time migrations for such changes.
+#
+# To evolve the schema:
+#   * New table  -> add it to SCHEMA_SQL (IF NOT EXISTS). No migration needed.
+#   * Alter/backfill an existing table -> bump SCHEMA_VERSION and add the SQL to
+#     MIGRATIONS under the new version number (also reflect it in SCHEMA_SQL so
+#     fresh DBs are born current).
+# --------------------------------------------------------------------------- #
+SCHEMA_VERSION = 1
+
+# version -> SQL script applied exactly once when upgrading TO that version.
+MIGRATIONS: dict[int, str] = {
+    # 2: "ALTER TABLE activities ADD COLUMN plan_step_id TEXT;",
+}
+
+
+def _apply_migrations(conn: sqlite3.Connection) -> None:
+    current = conn.execute("PRAGMA user_version").fetchone()[0]
+    for version in range(current + 1, SCHEMA_VERSION + 1):
+        script = MIGRATIONS.get(version)
+        if script:
+            conn.executescript(script)
+    if current != SCHEMA_VERSION:
+        # PRAGMA can't be parameterized; SCHEMA_VERSION is an int constant.
+        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+
+
 def initialize_database() -> None:
     with db_connection() as conn:
         conn.executescript(SCHEMA_SQL)
+        _apply_migrations(conn)
         seed_initial_data(conn)
         ensure_default_communication_provider(conn)
         backfill_audit_events(conn)
@@ -238,25 +312,12 @@ def seed_initial_data(conn: sqlite3.Connection) -> None:
             (discipline_id, name, slug, color, icon, sort_order, now, now),
         )
 
+    # Modules are the user's real life areas (scaffolding). They start empty —
+    # progress comes from real records/activities the user logs, never from seeded numbers.
     modules = [
-        (
-            "parknet",
-            "ParkNet",
-            "project",
-            "work",
-            1,
-            {
-                "progress_percent": 35,
-                "tasks_open": 4,
-                "tasks_done": 2,
-                "bugs_open": 1,
-                "bugs_done": 3,
-                "features_open": 2,
-                "features_done": 1,
-            },
-        ),
+        ("parknet", "ParkNet", "project", "work", 1, {}),
         ("gym", "Gym", "habit", "fitness", 2, {"weekly_target": 3}),
-        ("oscp", "OSCP", "learning", "learning", 1, {"progress_percent": 18, "learning_units_total": 12, "learning_units_done": 3}),
+        ("oscp", "OSCP", "learning", "learning", 1, {}),
         ("recovery", "Recovery", "recovery", "recovery", 2, {}),
         ("relationship", "Relationship", "relationship", "relationship", 3, {}),
     ]

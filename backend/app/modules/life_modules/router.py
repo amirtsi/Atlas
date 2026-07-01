@@ -6,7 +6,7 @@ from app.core.database import db_connection, new_id, row_to_dict, rows_to_dicts
 from app.core.time import utc_now_iso
 from app.modules.life_modules.behavior import build_behavior
 from app.shared.audit import record_audit_event
-from app.shared.schemas import ModuleBehaviorUpdate, ModuleCreate, ModuleUpdate
+from app.shared.schemas import LifeModuleOut, ModuleBehaviorUpdate, ModuleCreate, ModuleUpdate
 from app.shared.sql import apply_update, get_or_404, json_dump
 
 router = APIRouter(prefix="/modules", tags=["modules"])
@@ -27,7 +27,7 @@ VALID_MODULE_TYPES = {
 VALID_STATUSES = {"active", "paused", "completed", "archived"}
 
 
-@router.get("")
+@router.get("", response_model=list[LifeModuleOut])
 def list_modules(
     discipline_id: str | None = None,
     type: str | None = None,
@@ -56,7 +56,7 @@ def list_modules(
         return rows_to_dicts(conn.execute(sql, params).fetchall())
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, response_model=LifeModuleOut)
 def create_module(payload: ModuleCreate) -> dict:
     if payload.type not in VALID_MODULE_TYPES:
         raise HTTPException(status_code=422, detail="Unsupported module type")
@@ -102,7 +102,7 @@ def create_module(payload: ModuleCreate) -> dict:
         return module
 
 
-@router.get("/{module_id}")
+@router.get("/{module_id}", response_model=LifeModuleOut)
 def get_module(module_id: str) -> dict:
     with db_connection() as conn:
         return get_or_404(conn, "life_modules", module_id)
@@ -136,7 +136,7 @@ def update_module_behavior(module_id: str, payload: ModuleBehaviorUpdate) -> dic
         return build_behavior(conn, updated)
 
 
-@router.patch("/{module_id}")
+@router.patch("/{module_id}", response_model=LifeModuleOut)
 def update_module(module_id: str, payload: ModuleUpdate) -> dict:
     data = payload.model_dump(exclude_unset=True)
     if "status" in data and data["status"] not in VALID_STATUSES:
@@ -185,16 +185,16 @@ def _set_status(module_id: str, status: str) -> dict:
         return module
 
 
-@router.post("/{module_id}/archive")
+@router.post("/{module_id}/archive", response_model=LifeModuleOut)
 def archive_module(module_id: str) -> dict:
     return _set_status(module_id, "archived")
 
 
-@router.post("/{module_id}/pause")
+@router.post("/{module_id}/pause", response_model=LifeModuleOut)
 def pause_module(module_id: str) -> dict:
     return _set_status(module_id, "paused")
 
 
-@router.post("/{module_id}/resume")
+@router.post("/{module_id}/resume", response_model=LifeModuleOut)
 def resume_module(module_id: str) -> dict:
     return _set_status(module_id, "active")

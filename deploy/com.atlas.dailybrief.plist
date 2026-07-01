@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Atlas daily WhatsApp brief — macOS launchd trigger.
+  Fires once a day at 08:00 (local) and runs the standalone sender, independent
+  of the dev server. Idempotent: at most one brief per provider per day.
+
+  Install:
+    cp deploy/com.atlas.dailybrief.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.atlas.dailybrief.plist
+  Remove:
+    launchctl unload ~/Library/LaunchAgents/com.atlas.dailybrief.plist
+    rm ~/Library/LaunchAgents/com.atlas.dailybrief.plist
+  Run once now (test):
+    launchctl start com.atlas.dailybrief
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.atlas.dailybrief</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/amirtzibulevski/Desktop/Atlas/Atlas/backend/.venv/bin/python</string>
+        <string>-m</string>
+        <string>scripts.send_daily_brief</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/amirtzibulevski/Desktop/Atlas/Atlas/backend</string>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>8</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/amirtzibulevski/Desktop/Atlas/Atlas/backend/data/daily-brief.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/amirtzibulevski/Desktop/Atlas/Atlas/backend/data/daily-brief.log</string>
+</dict>
+</plist>
