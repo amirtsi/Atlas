@@ -210,7 +210,7 @@ def get_goal_plan(conn: Connection, goal_id: str) -> dict | None:
     return {"goal": goal, "plan": plan, "steps": steps, "overall_percent": overall, "drift": drift}
 
 
-def propose_plan_for_goal(conn: Connection, goal_id: str) -> dict:
+def propose_plan_for_goal(conn: Connection, goal_id: str, created_by: str = "system") -> dict:
     from app.modules.proposals.service import create_proposal
 
     goal = get_or_404(conn, "goals", goal_id)
@@ -242,13 +242,13 @@ def propose_plan_for_goal(conn: Connection, goal_id: str) -> dict:
     proposal = create_proposal(
         conn, "activate_plan", f"Plan for {goal['title']}",
         decomposed.get("rationale") or "Proposed plan from your goal.",
-        {"plan_id": plan_id}, created_by="system",
+        {"plan_id": plan_id}, created_by=created_by,
     )
     conn.execute("UPDATE plans SET source_proposal_id = ? WHERE id = ?", (proposal["id"], plan_id))
     return proposal
 
 
-def generate_replan_proposal(conn: Connection, goal_id: str) -> dict:
+def generate_replan_proposal(conn: Connection, goal_id: str, created_by: str = "system") -> dict:
     from app.modules.proposals.service import create_proposal
 
     plan_view = get_goal_plan(conn, goal_id)
@@ -300,7 +300,7 @@ def generate_replan_proposal(conn: Connection, goal_id: str) -> dict:
         )
     proposal = create_proposal(
         conn, "activate_plan", f"Re-plan for {goal['title']} (v{int(active['version']) + 1})",
-        decomposed.get("rationale") or context, {"plan_id": plan_id}, created_by="system",
+        decomposed.get("rationale") or context, {"plan_id": plan_id}, created_by=created_by,
     )
     conn.execute("UPDATE plans SET source_proposal_id = ? WHERE id = ?", (proposal["id"], plan_id))
     return proposal

@@ -71,3 +71,47 @@ def test_propose_plan_with_stubbed_decompose_creates_proposal(monkeypatch):
         result = mcp_server.propose_plan(goal["id"])
     assert result.get("type") == "activate_plan"
     assert result.get("status") == "pending"
+
+
+def test_propose_plan_tags_created_by_hermes(monkeypatch):
+    monkeypatch.setattr(
+        "app.modules.planning.service.decompose_goal",
+        lambda goal, context=None: {
+            "rationale": "stub",
+            "steps": [{"kind": "topic", "title": "Study AD", "sequence": 0, "unit": "minutes", "target": 60}],
+        },
+    )
+    with TestClient(app) as client:
+        module_id = _create_module(client)
+        goal = client.post(
+            "/api/v1/planning/goals",
+            json={"title": "Hermes plan", "module_id": module_id},
+        ).json()
+        result = mcp_server.propose_plan(goal["id"])
+    assert result["created_by"] == "hermes"
+
+
+def test_request_replan_tags_created_by_hermes(monkeypatch):
+    # A behind-schedule (past target_date) goal with an active plan; the MCP
+    # re-plan tool should file a v2 activate_plan proposal tagged created_by=hermes.
+    from app.modules.planning import service
+
+    monkeypatch.setattr(
+        service,
+        "decompose_goal",
+        lambda goal, context=None: {
+            "rationale": "adjusted",
+            "steps": [{"kind": "topic", "title": "AD", "sequence": 1, "unit": "minutes", "target": 60}],
+        },
+    )
+    with TestClient(app) as client:
+        module_id = {m["slug"]: m for m in client.get("/api/v1/modules").json()}["oscp"]["id"]
+        goal_id = client.post(
+            "/api/v1/planning/goals",
+            json={"title": "Pass OSCP", "module_id": module_id, "target_date": "2020-01-10T00:00:00+00:00"},
+        ).json()["id"]
+        pid = client.post(f"/api/v1/planning/goals/{goal_id}/propose-plan").json()["id"]
+        client.post(f"/api/v1/proposals/{pid}/accept")
+        result = mcp_server.request_replan(goal_id)
+    assert result["type"] == "activate_plan"
+    assert result["created_by"] == "hermes"
