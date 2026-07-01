@@ -2,9 +2,10 @@ import json
 
 from fastapi import APIRouter, HTTPException
 
-from app.core.database import db_connection, new_id, row_to_dict, rows_to_dicts
+from app.core.database import db_connection, new_id, rows_to_dicts
 from app.core.time import utc_now_iso
 from app.modules.life_modules.behavior import build_behavior
+from app.modules.life_modules.service import VALID_STATUSES, set_module_status
 from app.shared.audit import record_audit_event
 from app.shared.schemas import LifeModuleOut, ModuleBehaviorUpdate, ModuleCreate, ModuleUpdate
 from app.shared.sql import apply_update, get_or_404, json_dump
@@ -23,8 +24,6 @@ VALID_MODULE_TYPES = {
     "analytics",
     "ledger",
 }
-
-VALID_STATUSES = {"active", "paused", "completed", "archived"}
 
 
 @router.get("", response_model=list[LifeModuleOut])
@@ -164,37 +163,19 @@ def update_module(module_id: str, payload: ModuleUpdate) -> dict:
         return updated
 
 
-def _set_status(module_id: str, status: str) -> dict:
-    now = utc_now_iso()
-    with db_connection() as conn:
-        get_or_404(conn, "life_modules", module_id)
-        archived_at = now if status == "archived" else None
-        conn.execute(
-            "UPDATE life_modules SET status = ?, archived_at = ?, updated_at = ? WHERE id = ?",
-            (status, archived_at, now, module_id),
-        )
-        module = row_to_dict(conn.execute("SELECT * FROM life_modules WHERE id = ?", (module_id,)).fetchone())
-        record_audit_event(
-            conn,
-            entity_type="life_module",
-            entity_id=module_id,
-            action=f"status_{status}",
-            summary=f"Set module {module['name']} to {status}",
-            changes={"status": status},
-        )
-        return module
-
-
 @router.post("/{module_id}/archive", response_model=LifeModuleOut)
 def archive_module(module_id: str) -> dict:
-    return _set_status(module_id, "archived")
+    with db_connection() as conn:
+        return set_module_status(conn, module_id, "archived")
 
 
 @router.post("/{module_id}/pause", response_model=LifeModuleOut)
 def pause_module(module_id: str) -> dict:
-    return _set_status(module_id, "paused")
+    with db_connection() as conn:
+        return set_module_status(conn, module_id, "paused")
 
 
 @router.post("/{module_id}/resume", response_model=LifeModuleOut)
 def resume_module(module_id: str) -> dict:
-    return _set_status(module_id, "active")
+    with db_connection() as conn:
+        return set_module_status(conn, module_id, "active")

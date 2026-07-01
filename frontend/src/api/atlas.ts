@@ -546,3 +546,27 @@ export function logWellbeingSession(
     body: JSON.stringify(payload)
   });
 }
+
+export type Proposal = {
+  id: string;
+  type: string;
+  title: string;
+  rationale: string | null;
+  payload: Record<string, unknown>;
+  status: string;
+  created_by: string;
+  created_at: string;
+  resolved_at: string | null;
+};
+
+export function getProposals(status = "pending"): Promise<Proposal[]> {
+  return request<Proposal[]>(`/proposals?status=${encodeURIComponent(status)}`);
+}
+
+export function acceptProposal(id: string): Promise<Proposal> {
+  return request<Proposal>(`/proposals/${id}/accept`, { method: "POST" });
+}
+
+export function dismissProposal(id: string): Promise<Proposal> {
+  return request<Proposal>(`/proposals/${id}/dismiss`, { method: "POST" });
+}

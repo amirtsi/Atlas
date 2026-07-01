@@ -161,6 +161,20 @@ CREATE TABLE IF NOT EXISTS communication_webhook_events (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS proposals (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  rationale TEXT,
+  payload TEXT NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_by TEXT NOT NULL DEFAULT 'system',
+  created_at TEXT NOT NULL,
+  resolved_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status);
+
 CREATE INDEX IF NOT EXISTS idx_life_modules_discipline_id ON life_modules(discipline_id);
 CREATE INDEX IF NOT EXISTS idx_life_modules_type ON life_modules(type);
 CREATE INDEX IF NOT EXISTS idx_life_modules_status ON life_modules(status);

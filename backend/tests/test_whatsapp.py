@@ -303,6 +303,33 @@ class WhatsAppTwoWayTest(unittest.TestCase):
             self.assertEqual(classification["module_id"], recovery_id)
             self.assertEqual(_whatsapp_activity_count(client, recovery_id), before_activities + 1)
 
+    def test_bounced_coach_reply_does_not_loop(self) -> None:
+        # A coach reply is arbitrary text (no ✅/☀️ prefix). In the "Note to Self"
+        # setup it bounces back as a fromMe self-message; if the backup loop guard
+        # only checks prefixes, the bounce gets re-processed (and can re-trigger an
+        # LLM call). The content-match backup must skip it: no processing, no reply.
+        with TestClient(app) as client:
+            provider = _make_provider(client, {"dry_run": True, "instance": "atlas"})
+            url = f"/api/v1/communication/providers/{provider['id']}/webhooks/evolution"
+
+            question = client.post(url, json=_webhook_payload(OWNER, "מה עשיתי השבוע?", key_id="q-1"))
+            self.assertTrue(question.json()["classification"]["method"].startswith("coach:"))
+
+            messages = client.get(f"/api/v1/communication/messages?provider_id={provider['id']}").json()
+            coach_reply = next(
+                m for m in messages if m["direction"] == "outbound" and (m.get("metadata") or {}).get("auto_reply")
+            )
+            replies_before = _auto_reply_count(client, provider["id"])
+
+            # That exact reply bounces back as a fromMe self-message with a fresh id.
+            bounce = client.post(
+                url,
+                json=_webhook_payload(OWNER, coach_reply["content_text"], from_me=True, key_id="bounce-1"),
+            )
+            self.assertEqual(bounce.status_code, 202)
+            self.assertIsNone(bounce.json()["classification"])  # skipped, never processed
+            self.assertEqual(_auto_reply_count(client, provider["id"]), replies_before)  # no new reply
+
 
 if __name__ == "__main__":
     unittest.main()

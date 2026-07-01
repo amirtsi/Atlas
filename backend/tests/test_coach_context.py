@@ -7,6 +7,7 @@ from app.modules.coach.context import build_context
 def test_context_carries_real_numbers_and_focus_module():
     with TestClient(app) as client:
         modules = {m["slug"]: m for m in client.get("/api/v1/modules").json()}
+        assert "oscp" in modules, "seed is missing the oscp module"
         oscp = modules["oscp"]
         created = client.post(
             "/api/v1/activities",
