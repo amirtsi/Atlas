@@ -34,13 +34,28 @@ _HANDLERS: dict[str, ProposalHandler] = {
     "set_module_status": _apply_set_module_status,
 }
 
-KNOWN_TYPES = set(_HANDLERS)
+
+def register_proposal_handler(proposal_type: str, handler: ProposalHandler) -> None:
+    """Let other domains add proposal types without proposals importing them (avoids
+    an import cycle and keeps this module closed to modification — OCP)."""
+    _HANDLERS[proposal_type] = handler
+
+
+class _KnownTypes:
+    def __contains__(self, item: object) -> bool:
+        return item in _HANDLERS
+
+    def __iter__(self):
+        return iter(_HANDLERS)
+
+
+KNOWN_TYPES = _KnownTypes()
 
 
 def create_proposal(
     conn: Connection, type: str, title: str, rationale: str | None, payload: dict, created_by: str = "system"
 ) -> dict:
-    if type not in KNOWN_TYPES:
+    if type not in _HANDLERS:
         raise HTTPException(status_code=422, detail="Unknown proposal type")
     module_id = payload.get("module_id")
     if module_id:

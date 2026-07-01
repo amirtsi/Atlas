@@ -328,3 +328,29 @@ class ProposalOut(AtlasResponse):
     created_by: str | None = None
     created_at: str | None = None
     resolved_at: str | None = None
+
+
+class GoalCreate(AtlasModel):
+    title: str = Field(min_length=1)
+    module_id: str | None = None
+    discipline_id: str | None = None
+    definition_of_done: str | None = None
+    target_date: str | None = None
+    capacity_minutes_per_week: int | None = None
+    created_by: str = "user"
+
+
+class GoalOut(AtlasResponse):
+    id: str
+    module_id: str | None = None
+    discipline_id: str | None = None
+    title: str | None = None
+    definition_of_done: str | None = None
+    status: str | None = None
+    target_date: str | None = None
+    capacity_minutes_per_week: int | None = None
+    active_plan_id: str | None = None
+    created_by: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    achieved_at: str | None = None

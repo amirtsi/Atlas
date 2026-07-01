@@ -175,6 +175,60 @@ CREATE TABLE IF NOT EXISTS proposals (
 
 CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status);
 
+CREATE TABLE IF NOT EXISTS goals (
+  id TEXT PRIMARY KEY,
+  module_id TEXT REFERENCES life_modules(id),
+  discipline_id TEXT REFERENCES disciplines(id),
+  title TEXT NOT NULL,
+  definition_of_done TEXT,
+  status TEXT NOT NULL DEFAULT 'draft',
+  target_date TEXT,
+  capacity_minutes_per_week INTEGER,
+  active_plan_id TEXT,
+  created_by TEXT NOT NULL DEFAULT 'user',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  achieved_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS plans (
+  id TEXT PRIMARY KEY,
+  goal_id TEXT NOT NULL REFERENCES goals(id),
+  version INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'proposed',
+  rationale TEXT,
+  based_on_plan_id TEXT,
+  source_proposal_id TEXT,
+  created_at TEXT NOT NULL,
+  activated_at TEXT,
+  superseded_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS plan_steps (
+  id TEXT PRIMARY KEY,
+  plan_id TEXT NOT NULL REFERENCES plans(id),
+  goal_id TEXT NOT NULL REFERENCES goals(id),
+  parent_id TEXT REFERENCES plan_steps(id),
+  kind TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT,
+  sequence INTEGER NOT NULL DEFAULT 0,
+  depends_on TEXT NOT NULL DEFAULT '[]',
+  completion_rule TEXT NOT NULL DEFAULT '{}',
+  scheduled_for TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS plan_step_links (
+  step_id TEXT NOT NULL REFERENCES plan_steps(id),
+  activity_id TEXT NOT NULL REFERENCES activities(id),
+  PRIMARY KEY (step_id, activity_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_plans_goal_id ON plans(goal_id);
+CREATE INDEX IF NOT EXISTS idx_plan_steps_plan_id ON plan_steps(plan_id);
+
 CREATE INDEX IF NOT EXISTS idx_life_modules_discipline_id ON life_modules(discipline_id);
 CREATE INDEX IF NOT EXISTS idx_life_modules_type ON life_modules(type);
 CREATE INDEX IF NOT EXISTS idx_life_modules_status ON life_modules(status);
@@ -282,7 +336,7 @@ def row_to_dict(row: sqlite3.Row | None) -> dict | None:
     if row is None:
         return None
     data = dict(row)
-    for key in ("config", "metadata", "default_metadata", "classification_json", "changes", "payload"):
+    for key in ("config", "metadata", "default_metadata", "classification_json", "changes", "payload", "depends_on", "completion_rule"):
         if key in data and isinstance(data[key], str):
             try:
                 data[key] = json.loads(data[key])
