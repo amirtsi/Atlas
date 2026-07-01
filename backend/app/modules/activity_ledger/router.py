@@ -9,7 +9,9 @@ from app.modules.activity_ledger.service import insert_activity
 from app.shared.audit import record_audit_event
 from app.shared.schemas import (
     ActivityCreate,
+    ActivityOut,
     ActivityTemplateCreate,
+    ActivityTemplateOut,
     ActivityTemplateUpdate,
     ActivityUpdate,
     QuickLogCreate,
@@ -19,7 +21,7 @@ from app.shared.sql import apply_update, get_or_404, json_dump
 router = APIRouter(tags=["activity-ledger"])
 
 
-@router.get("/activities")
+@router.get("/activities", response_model=list[ActivityOut])
 def list_activities(
     discipline_id: str | None = None,
     module_id: str | None = None,
@@ -63,13 +65,13 @@ def list_activities(
         return rows_to_dicts(conn.execute(sql, params).fetchall())
 
 
-@router.post("/activities", status_code=201)
+@router.post("/activities", status_code=201, response_model=ActivityOut)
 def create_activity(payload: ActivityCreate) -> dict:
     with db_connection() as conn:
         return insert_activity(conn, payload)
 
 
-@router.post("/activities/quick-log", status_code=201)
+@router.post("/activities/quick-log", status_code=201, response_model=ActivityOut)
 def quick_log(payload: QuickLogCreate) -> dict:
     with db_connection() as conn:
         if payload.template_id:
@@ -101,7 +103,7 @@ def quick_log(payload: QuickLogCreate) -> dict:
         return insert_activity(conn, activity)
 
 
-@router.get("/activities/{activity_id}")
+@router.get("/activities/{activity_id}", response_model=ActivityOut)
 def get_activity(activity_id: str) -> dict:
     with db_connection() as conn:
         return get_or_404(conn, "activities", activity_id)
@@ -121,7 +123,7 @@ _ACTIVITY_UPDATE_FIELDS = {
 }
 
 
-@router.patch("/activities/{activity_id}")
+@router.patch("/activities/{activity_id}", response_model=ActivityOut)
 def update_activity(activity_id: str, payload: ActivityUpdate) -> dict:
     # Only explicitly-sent fields are applied; an explicit null IS applied (so an
     # activity can be moved back to "no module"). This is why we don't reuse
@@ -160,7 +162,7 @@ def update_activity(activity_id: str, payload: ActivityUpdate) -> dict:
         return updated
 
 
-@router.delete("/activities/{activity_id}")
+@router.delete("/activities/{activity_id}", response_model=ActivityOut)
 def delete_activity(activity_id: str) -> dict:
     with db_connection() as conn:
         activity = get_or_404(conn, "activities", activity_id)
@@ -176,7 +178,7 @@ def delete_activity(activity_id: str) -> dict:
         return activity
 
 
-@router.get("/activity-templates")
+@router.get("/activity-templates", response_model=list[ActivityTemplateOut])
 def list_templates(include_inactive: bool = False) -> list[dict]:
     sql = """
     SELECT
@@ -198,7 +200,7 @@ def list_templates(include_inactive: bool = False) -> list[dict]:
         return rows_to_dicts(conn.execute(sql).fetchall())
 
 
-@router.post("/activity-templates", status_code=201)
+@router.post("/activity-templates", status_code=201, response_model=ActivityTemplateOut)
 def create_template(payload: ActivityTemplateCreate) -> dict:
     now = utc_now_iso()
     with db_connection() as conn:
@@ -239,7 +241,7 @@ def create_template(payload: ActivityTemplateCreate) -> dict:
         return template
 
 
-@router.patch("/activity-templates/{template_id}")
+@router.patch("/activity-templates/{template_id}", response_model=ActivityTemplateOut)
 def update_template(template_id: str, payload: ActivityTemplateUpdate) -> dict:
     with db_connection() as conn:
         updated = apply_update(
@@ -269,7 +271,7 @@ def update_template(template_id: str, payload: ActivityTemplateUpdate) -> dict:
         return updated
 
 
-@router.delete("/activity-templates/{template_id}")
+@router.delete("/activity-templates/{template_id}", response_model=ActivityTemplateOut)
 def deactivate_template(template_id: str) -> dict:
     with db_connection() as conn:
         get_or_404(conn, "activity_templates", template_id)

@@ -15,7 +15,9 @@ from app.shared.audit import record_audit_event
 from app.shared.schemas import (
     ActivityCreate,
     CommunicationMessageCreate,
+    CommunicationMessageOut,
     CommunicationProviderCreate,
+    CommunicationProviderOut,
     CommunicationProviderUpdate,
 )
 from app.shared.sql import apply_update, get_or_404, json_dump
@@ -40,7 +42,7 @@ def _provider_config_with_defaults(config: dict) -> dict:
     return next_config
 
 
-@router.get("/providers")
+@router.get("/providers", response_model=list[CommunicationProviderOut])
 def list_providers(include_inactive: bool = False) -> list[dict]:
     sql = "SELECT * FROM communication_providers"
     if not include_inactive:
@@ -50,7 +52,7 @@ def list_providers(include_inactive: bool = False) -> list[dict]:
         return [_safe_provider(provider) for provider in rows_to_dicts(conn.execute(sql).fetchall())]
 
 
-@router.post("/providers", status_code=201)
+@router.post("/providers", status_code=201, response_model=CommunicationProviderOut)
 def create_provider(payload: CommunicationProviderCreate) -> dict:
     if payload.type not in SUPPORTED_PROVIDERS:
         raise HTTPException(status_code=422, detail="Unsupported communication provider")
@@ -79,7 +81,7 @@ def create_provider(payload: CommunicationProviderCreate) -> dict:
         return _safe_provider(provider)
 
 
-@router.patch("/providers/{provider_id}")
+@router.patch("/providers/{provider_id}", response_model=CommunicationProviderOut)
 def update_provider(provider_id: str, payload: CommunicationProviderUpdate) -> dict:
     update_payload = payload.model_dump(exclude_unset=True)
     if isinstance(update_payload.get("config"), dict):
@@ -103,7 +105,7 @@ def update_provider(provider_id: str, payload: CommunicationProviderUpdate) -> d
         return _safe_provider(provider)
 
 
-@router.get("/messages")
+@router.get("/messages", response_model=list[CommunicationMessageOut])
 def list_messages(provider_id: str | None = None, limit: int = 100, offset: int = 0) -> list[dict]:
     where: list[str] = []
     params: list[object] = []
@@ -119,7 +121,7 @@ def list_messages(provider_id: str | None = None, limit: int = 100, offset: int 
         return rows_to_dicts(conn.execute(sql, params).fetchall())
 
 
-@router.post("/messages", status_code=201)
+@router.post("/messages", status_code=201, response_model=CommunicationMessageOut)
 def send_message(payload: CommunicationMessageCreate) -> dict:
     if payload.direction != "outbound":
         raise HTTPException(status_code=422, detail="Use provider webhooks for inbound messages")

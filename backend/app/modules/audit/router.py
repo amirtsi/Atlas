@@ -1,11 +1,12 @@
 from fastapi import APIRouter
 
 from app.core.database import db_connection, rows_to_dicts
+from app.shared.schemas import AuditEventOut
 
 router = APIRouter(prefix="/audit-events", tags=["audit"])
 
 
-@router.get("")
+@router.get("", response_model=list[AuditEventOut])
 def list_audit_events(
     entity_type: str | None = None,
     entity_id: str | None = None,
