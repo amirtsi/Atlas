@@ -305,6 +305,17 @@ export type WellbeingSessionPayload = {
   values: Record<string, number>;
 };
 
+export class ApiError extends Error {
+  status: number;
+  detail: string | null;
+  constructor(status: number, detail: string | null) {
+    super(detail ?? `Atlas API error ${status}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
@@ -315,7 +326,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(`Atlas API error ${response.status}`);
+    let detail: string | null = null;
+    try {
+      const body = (await response.json()) as { detail?: unknown };
+      detail = typeof body?.detail === "string" ? body.detail : null;
+    } catch {
+      detail = null;
+    }
+    throw new ApiError(response.status, detail);
   }
 
   return response.json() as Promise<T>;
@@ -569,4 +587,93 @@ export function acceptProposal(id: string): Promise<Proposal> {
 
 export function dismissProposal(id: string): Promise<Proposal> {
   return request<Proposal>(`/proposals/${id}/dismiss`, { method: "POST" });
+}
+
+export type Goal = {
+  id: string;
+  title: string | null;
+  module_id: string | null;
+  discipline_id: string | null;
+  definition_of_done: string | null;
+  status: string | null;
+  target_date: string | null;
+  capacity_minutes_per_week: number | null;
+  active_plan_id: string | null;
+  created_by: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  achieved_at: string | null;
+};
+
+export type PlanStepProgress = {
+  done: number;
+  target: number;
+  ratio: number;
+  status: string;
+  last_activity_at: string | null;
+};
+
+export type PlanStep = {
+  id: string;
+  title: string;
+  description: string | null;
+  kind: string;
+  sequence: number;
+  progress: PlanStepProgress;
+};
+
+export type Drift = {
+  expected_percent: number;
+  actual_percent: number;
+  drift: number;
+  projected_completion: string | null;
+  on_track: boolean;
+};
+
+export type Plan = {
+  id: string;
+  goal_id: string;
+  version: number;
+  status: string;
+  rationale: string | null;
+  activated_at: string | null;
+};
+
+export type GoalPlan = {
+  goal: Goal;
+  plan: Plan;
+  steps: PlanStep[];
+  overall_percent: number;
+  drift: Drift | null;
+};
+
+export type GoalCreatePayload = {
+  title: string;
+  module_id?: string;
+  target_date?: string;
+  capacity_minutes_per_week?: number;
+  definition_of_done?: string;
+};
+
+export type ReplanResult = Proposal | { status: "on_track" | "replan_pending" };
+
+export function getGoals(status?: string): Promise<Goal[]> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return request<Goal[]>(`/planning/goals${query}`);
+}
+
+export function createGoal(payload: GoalCreatePayload): Promise<Goal> {
+  return request<Goal>("/planning/goals", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function proposePlan(goalId: string): Promise<Proposal> {
+  return request<Proposal>(`/planning/goals/${goalId}/propose-plan`, { method: "POST" });
+}
+
+export function getGoalPlan(goalId: string): Promise<GoalPlan> {
+  return request<GoalPlan>(`/planning/goals/${goalId}/plan`);
+}
+
+export function replanGoal(goalId: string): Promise<ReplanResult> {
+  return request<ReplanResult>(`/planning/goals/${goalId}/replan`, { method: "POST" });
 }
