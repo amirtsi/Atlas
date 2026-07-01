@@ -8,6 +8,7 @@ import { LifePulse, MissionCenter, LifeTimeline, DashboardCalendar, RightNowHero
 import { AuditView } from "./features/audit";
 import { CommunicationView } from "./features/communication";
 import { QuickLogSheet } from "./features/quick-log";
+import { CoachInbox } from "./features/coach-inbox";
 
 
 export function App() {
@@ -300,6 +301,7 @@ export function App() {
                   onOpen={() => setActiveModal("calendar")}
                 />
                 <NewsTile />
+                <CoachInbox onChanged={refreshDashboard} />
               </section>
             </>
           ) : (
