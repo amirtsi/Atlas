@@ -16,7 +16,10 @@ from mcp.server.fastmcp import FastMCP
 
 from app.core.database import db_connection, rows_to_dicts
 from app.modules.dashboard.service import get_today_dashboard as _get_today_dashboard
+from app.modules.planning.service import generate_replan_proposal as _generate_replan_proposal
 from app.modules.planning.service import get_goal_plan as _get_goal_plan
+from app.modules.planning.service import propose_plan_for_goal as _propose_plan_for_goal
+from app.modules.proposals.service import create_proposal as _create_proposal
 
 server = FastMCP("atlas")
 
@@ -87,6 +90,71 @@ def list_proposals(status: str = "pending") -> list[dict]:
         return rows_to_dicts(conn.execute(sql, params).fetchall())
 
 
+# --- Propose-only write tools (create PENDING proposals; never apply) -------
+
+def propose_module_status(module_id: str, status: str, rationale: str) -> dict:
+    """Propose setting a module's status (pending; owner must accept to apply)."""
+    from fastapi import HTTPException
+
+    try:
+        with db_connection() as conn:
+            return _create_proposal(
+                conn,
+                type="set_module_status",
+                title=f"Set module status → {status}",
+                rationale=rationale,
+                payload={"module_id": module_id, "status": status},
+                created_by="hermes",
+            )
+    except HTTPException as exc:
+        return {"error": exc.detail, "status_code": exc.status_code}
+
+
+def propose_module_priority(module_id: str, priority: int, rationale: str) -> dict:
+    """Propose setting a module's priority (pending; owner must accept to apply)."""
+    from fastapi import HTTPException
+
+    try:
+        with db_connection() as conn:
+            return _create_proposal(
+                conn,
+                type="set_module_priority",
+                title=f"Set module priority → {priority}",
+                rationale=rationale,
+                payload={"module_id": module_id, "priority": priority},
+                created_by="hermes",
+            )
+    except HTTPException as exc:
+        return {"error": exc.detail, "status_code": exc.status_code}
+
+
+def propose_plan(goal_id: str) -> dict:
+    """Propose an LLM-decomposed plan for a goal (pending activate_plan proposal).
+
+    Key-gated: without an AI key the planning service raises 422 and this returns
+    an error object — never a fabricated plan.
+    """
+    from fastapi import HTTPException
+
+    try:
+        with db_connection() as conn:
+            return _propose_plan_for_goal(conn, goal_id)
+    except HTTPException as exc:
+        return {"error": exc.detail, "status_code": exc.status_code}
+
+
+def request_replan(goal_id: str) -> dict:
+    """Request a drift-driven re-plan proposal for a goal (pending; key-gated)."""
+    from fastapi import HTTPException
+
+    try:
+        with db_connection() as conn:
+            result = _generate_replan_proposal(conn, goal_id)
+    except HTTPException as exc:
+        return {"error": exc.detail, "status_code": exc.status_code}
+    return result if result is not None else {"status": "on_track"}
+
+
 READ_TOOLS = [
     atlas_snapshot,
     list_modules,
@@ -97,6 +165,16 @@ READ_TOOLS = [
 ]
 
 for _tool in READ_TOOLS:
+    server.tool()(_tool)
+
+WRITE_TOOLS = [
+    propose_module_status,
+    propose_module_priority,
+    propose_plan,
+    request_replan,
+]
+
+for _tool in WRITE_TOOLS:
     server.tool()(_tool)
 
 
