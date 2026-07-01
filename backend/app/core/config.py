@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     classification_model: str = "claude-haiku-4-5"
     log_level: str = "INFO"
+    # WhatsApp Q&A coach. Answers owner questions from real logged data using the
+    # Anthropic adapter (reuses ATLAS_ANTHROPIC_API_KEY). Disable with
+    # ATLAS_COACH_ENABLED=false — questions then fall back to a clarification reply.
+    coach_enabled: bool = True
+    coach_model: str = "claude-haiku-4-5"
     # Automatic daily brief: an in-app scheduler sends each active provider's
     # owner a brief built from real dashboard signals, once per day at this
     # local (timezone) time.
