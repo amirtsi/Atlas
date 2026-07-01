@@ -1,7 +1,9 @@
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter
 
+from app.core.config import get_settings
 from app.core.database import db_connection, rows_to_dicts
 from app.modules.life_modules.behavior import build_behavior
 
@@ -10,7 +12,14 @@ router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
 @router.get("/today")
 def get_today_dashboard() -> dict:
-    today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    # "Today" must mean the user's local calendar day (Asia/Jerusalem), not UTC —
+    # otherwise an evening activity counts as "today" in the backend while the
+    # frontend calendars (which group by local day) place it on the previous date.
+    # We express the local-midnight boundary as a UTC instant so it compares
+    # correctly against the UTC-stored occurred_at values.
+    tz = ZoneInfo(get_settings().timezone)
+    now_local = datetime.now(tz)
+    today_start = now_local.replace(hour=0, minute=0, second=0, microsecond=0).astimezone(UTC).isoformat()
     week_start = (datetime.now(UTC) - timedelta(days=7)).replace(microsecond=0).isoformat()
     with db_connection() as conn:
         recent_activities = rows_to_dicts(

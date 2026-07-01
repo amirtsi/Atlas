@@ -1,13 +1,9 @@
-import os
-import tempfile
 import unittest
-from pathlib import Path
 
-os.environ["ATLAS_DATABASE_PATH"] = str(Path(tempfile.mkdtemp()) / "atlas-test.sqlite")
+from fastapi.testclient import TestClient
 
-from fastapi.testclient import TestClient  # noqa: E402
-
-from app.main import app  # noqa: E402
+# DB isolation is handled centrally in tests/conftest.py (per-test temp DB).
+from app.main import app
 
 
 class CoreFlowTest(unittest.TestCase):
@@ -56,6 +52,119 @@ class CoreFlowTest(unittest.TestCase):
                 client.post(f"/api/v1/project/{project_id}/items/{item_id}/complete", json={}).status_code,
                 409,
             )
+
+    def test_activity_create_edit_delete(self) -> None:
+        # The Journal/Timeline/Calendar CRUD relies on POST/PATCH/DELETE /activities.
+        with TestClient(app) as client:
+            modules = {item["slug"]: item for item in client.get("/api/v1/modules").json()}
+            gym = modules["gym"]
+
+            created = client.post(
+                "/api/v1/activities",
+                json={
+                    "title": "Morning run",
+                    "activity_type": gym["type"],
+                    "module_id": gym["id"],
+                    "duration_minutes": 30,
+                    "occurred_at": "2026-06-20T06:30:00+00:00",
+                    "source": "manual",
+                },
+            )
+            self.assertEqual(created.status_code, 201)
+            activity = created.json()
+            self.assertEqual(activity["duration_minutes"], 30)
+            # module_id given without discipline_id → discipline inferred from the module.
+            self.assertEqual(activity["discipline_id"], gym["discipline_id"])
+
+            edited = client.patch(
+                f"/api/v1/activities/{activity['id']}",
+                json={"title": "Evening run", "duration_minutes": 45, "notes": "felt strong"},
+            )
+            self.assertEqual(edited.status_code, 200)
+            self.assertEqual(edited.json()["title"], "Evening run")
+            self.assertEqual(edited.json()["duration_minutes"], 45)
+            self.assertEqual(edited.json()["notes"], "felt strong")
+
+            deleted = client.delete(f"/api/v1/activities/{activity['id']}")
+            self.assertEqual(deleted.status_code, 200)
+            self.assertEqual(client.get(f"/api/v1/activities/{activity['id']}").status_code, 404)
+
+    def test_naive_occurred_at_is_normalized_to_utc(self) -> None:
+        # The write path stores tz-aware UTC; a naive client value is read as the
+        # configured local timezone (Asia/Jerusalem, UTC+3) then converted.
+        with TestClient(app) as client:
+            gym = {item["slug"]: item for item in client.get("/api/v1/modules").json()}["gym"]
+            created = client.post(
+                "/api/v1/activities",
+                json={
+                    "title": "Naive timestamp run",
+                    "activity_type": gym["type"],
+                    "module_id": gym["id"],
+                    "occurred_at": "2026-06-20T09:00:00",
+                },
+            )
+            self.assertEqual(created.status_code, 201)
+            self.assertEqual(created.json()["occurred_at"], "2026-06-20T06:00:00+00:00")
+            client.delete(f"/api/v1/activities/{created.json()['id']}")
+
+    def test_activity_module_reassignment_updates_discipline(self) -> None:
+        # Moving an activity to another module must carry its discipline along
+        # (Life Pulse / weekly balance group by discipline), and it can be unset.
+        with TestClient(app) as client:
+            mods = client.get("/api/v1/modules").json()
+            first = mods[0]
+            other = next(m for m in mods if m["discipline_id"] != first["discipline_id"])
+
+            created = client.post(
+                "/api/v1/activities",
+                json={"title": "Mislabeled log", "activity_type": first["type"], "module_id": first["id"]},
+            ).json()
+            self.assertEqual(created["module_id"], first["id"])
+            self.assertEqual(created["discipline_id"], first["discipline_id"])
+
+            moved = client.patch(f"/api/v1/activities/{created['id']}", json={"module_id": other["id"]})
+            self.assertEqual(moved.status_code, 200)
+            self.assertEqual(moved.json()["module_id"], other["id"])
+            self.assertEqual(moved.json()["discipline_id"], other["discipline_id"])
+
+            # Reassigning to "general" (null) clears both module and discipline.
+            cleared = client.patch(f"/api/v1/activities/{created['id']}", json={"module_id": None})
+            self.assertIsNone(cleared.json()["module_id"])
+            self.assertIsNone(cleared.json()["discipline_id"])
+
+            client.delete(f"/api/v1/activities/{created['id']}")
+
+    def test_module_create_edit_archive(self) -> None:
+        # Mission Center CRUD: create, edit, pause/resume, archive.
+        with TestClient(app) as client:
+            discipline = client.get("/api/v1/disciplines").json()[0]
+            created = client.post(
+                "/api/v1/modules",
+                json={
+                    "name": "Test Mission",
+                    "slug": "test-mission-xyz",
+                    "type": "project",
+                    "discipline_id": discipline["id"],
+                    "priority": 2,
+                },
+            )
+            self.assertEqual(created.status_code, 201)
+            module_id = created.json()["id"]
+            self.assertEqual(created.json()["status"], "active")
+
+            edited = client.patch(f"/api/v1/modules/{module_id}", json={"name": "Renamed Mission", "priority": 1})
+            self.assertEqual(edited.json()["name"], "Renamed Mission")
+            self.assertEqual(edited.json()["priority"], 1)
+
+            self.assertEqual(client.post(f"/api/v1/modules/{module_id}/pause").json()["status"], "paused")
+            self.assertEqual(client.post(f"/api/v1/modules/{module_id}/resume").json()["status"], "active")
+
+            archived = client.post(f"/api/v1/modules/{module_id}/archive")
+            self.assertEqual(archived.json()["status"], "archived")
+            self.assertIsNotNone(archived.json()["archived_at"])
+
+            active_ids = [m["id"] for m in client.get("/api/v1/modules?status=active").json()]
+            self.assertNotIn(module_id, active_ids)
 
     def test_learning_units_drive_progress(self) -> None:
         with TestClient(app) as client:
@@ -108,6 +217,7 @@ class CoreFlowTest(unittest.TestCase):
             overview = client.get(f"/api/v1/wellbeing/{recovery_id}/overview")
             self.assertEqual(overview.status_code, 200)
             self.assertEqual([definition["key"] for definition in overview.json()["metric_defs"]], ["pain", "mobility"])
+            before_sessions = overview.json()["summary"]["sessions_week"]
 
             # A module that isn't a wellbeing type has no session log.
             self.assertEqual(client.get(f"/api/v1/wellbeing/{modules['parknet']['id']}/overview").status_code, 422)
@@ -120,7 +230,7 @@ class CoreFlowTest(unittest.TestCase):
             self.assertCountEqual(logged.json()["metrics_recorded"], ["pain", "mobility"])
 
             after = client.get(f"/api/v1/wellbeing/{recovery_id}/overview").json()
-            self.assertEqual(after["summary"]["sessions_week"], 1)
+            self.assertEqual(after["summary"]["sessions_week"], before_sessions + 1)
             self.assertEqual(after["summary"]["metrics"]["pain"]["latest"], 4)
 
             # The session created a real activity and real metric rows (not config).

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
+  Archive,
   BatteryCharging,
   BookOpen,
   Bug,
@@ -17,6 +18,7 @@ import {
   Layers3,
   Maximize2,
   Newspaper,
+  Pencil,
   Plus,
   Quote as QuoteIcon,
   Rocket,
@@ -34,6 +36,8 @@ import {
   type AuditEvent,
   type ActivityTemplate,
   type ActivityTemplatePayload,
+  type ActivityUpdatePayload,
+  type CreateActivityPayload,
   type CommunicationMessage,
   type CommunicationProvider,
   type DashboardResponse,
@@ -66,7 +70,13 @@ import {
   createActivityTemplate,
   DEFAULT_WHATSAPP_RECIPIENT,
   DEFAULT_WHATSAPP_RECIPIENT_LOCAL,
+  archiveModule,
+  pauseModule,
+  resumeModule,
+  createActivity,
   createModule,
+  deleteActivity,
+  updateActivity,
   getActivities,
   getActivityTemplates,
   getAuditEvents,
@@ -234,6 +244,16 @@ function moduleTypeLabel(type: string): string {
     ledger: "Ledger"
   };
   return labels[type] ?? type;
+}
+
+function moduleStatusLabel(status: string): string {
+  const labels: Record<string, string> = {
+    active: "פעיל",
+    paused: "מושהה",
+    completed: "הושלם",
+    archived: "בארכיון"
+  };
+  return labels[status] ?? status;
 }
 
 function slugify(value: string): string {
@@ -830,7 +850,258 @@ function ApiUnavailablePanel() {
   );
 }
 
-function JournalView({ activities }: { activities: JournalActivity[] }) {
+function ActivityEditForm({
+  activity,
+  modules,
+  onSave,
+  onCancel
+}: {
+  activity: JournalActivity;
+  modules: LifeModule[];
+  onSave: (payload: ActivityUpdatePayload) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState(activity.title);
+  const [duration, setDuration] = useState(activity.duration_minutes != null ? String(activity.duration_minutes) : "");
+  const [notes, setNotes] = useState(activity.notes ?? "");
+  const [moduleId, setModuleId] = useState(activity.module_id ?? "");
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmed = title.trim();
+    if (!trimmed) {
+      return;
+    }
+    const payload: ActivityUpdatePayload = {
+      title: trimmed,
+      duration_minutes: duration.trim() ? Number(duration) : null,
+      notes: notes.trim() || null
+    };
+    // Only send module_id when it actually changed — null moves it to "general".
+    if (moduleId !== (activity.module_id ?? "")) {
+      payload.module_id = moduleId || null;
+    }
+    onSave(payload);
+  }
+
+  return (
+    <form className="activity-edit-form quick-log-form" onSubmit={submit}>
+      <label>
+        <span>כותרת</span>
+        <input autoFocus dir="auto" value={title} onChange={(event) => setTitle(event.target.value)} />
+      </label>
+      <div className="form-row">
+        <label>
+          <span>Module</span>
+          <select value={moduleId} onChange={(event) => setModuleId(event.target.value)}>
+            <option value="">Atlas / כללי</option>
+            {modules.map((module) => (
+              <option key={module.id} value={module.id}>
+                {module.name} · {moduleTypeLabel(module.type)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>דקות</span>
+          <input
+            inputMode="numeric"
+            min="0"
+            type="number"
+            value={duration}
+            onChange={(event) => setDuration(event.target.value)}
+            placeholder="אופציונלי"
+          />
+        </label>
+      </div>
+      <label>
+        <span>הערה</span>
+        <textarea dir="auto" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="אופציונלי" />
+      </label>
+      <div className="activity-edit-actions">
+        <button className="quick-submit" type="submit" disabled={!title.trim()}>
+          <Save size={15} /> שמור
+        </button>
+        <button className="ghost-button" type="button" onClick={onCancel}>
+          ביטול
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function EditableActivityRow({
+  activity,
+  modules,
+  showDate = false,
+  onUpdate,
+  onDelete
+}: {
+  activity: JournalActivity;
+  modules: LifeModule[];
+  showDate?: boolean;
+  onUpdate: (id: string, payload: ActivityUpdatePayload) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  if (editing) {
+    return (
+      <article className="activity-row editing">
+        <ActivityEditForm
+          activity={activity}
+          modules={modules}
+          onSave={(payload) => {
+            onUpdate(activity.id, payload);
+            setEditing(false);
+          }}
+          onCancel={() => setEditing(false)}
+        />
+      </article>
+    );
+  }
+
+  return (
+    <article className="activity-row">
+      <div className="activity-row-main">
+        <div className="timeline-title-row">
+          <strong dir="auto">{activity.title}</strong>
+          <Chip accent={accentForSlug(activity.discipline_slug)}>
+            {disciplineLabel(activity.discipline_slug, activity.discipline_name)}
+          </Chip>
+        </div>
+        <span className="activity-row-meta">
+          {showDate ? `${new Date(activity.occurred_at).toLocaleDateString("he-IL")} · ` : ""}
+          {formatActivityTime(activity.occurred_at)} · {activity.module_name ?? activity.activity_type} · {activity.duration_minutes ?? 0} דק׳
+        </span>
+        {activity.notes ? <small className="activity-row-notes" dir="auto">{activity.notes}</small> : null}
+      </div>
+      <div className="activity-actions">
+        {confirming ? (
+          <>
+            <button className="activity-action danger" type="button" onClick={() => onDelete(activity.id)}>
+              מחק
+            </button>
+            <button className="activity-action" type="button" onClick={() => setConfirming(false)}>
+              ביטול
+            </button>
+          </>
+        ) : (
+          <>
+            <button className="icon-button small" type="button" aria-label="ערוך פעולה" onClick={() => setEditing(true)}>
+              <Pencil size={15} />
+            </button>
+            <button className="icon-button small" type="button" aria-label="מחק פעולה" onClick={() => setConfirming(true)}>
+              <Trash2 size={15} />
+            </button>
+          </>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function DayQuickAdd({
+  dateKey,
+  modules,
+  disciplines,
+  onAdd
+}: {
+  dateKey: string;
+  modules: LifeModule[];
+  disciplines: Discipline[];
+  onAdd: (payload: CreateActivityPayload) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [moduleId, setModuleId] = useState("");
+  const [duration, setDuration] = useState("30");
+
+  const selectedModule = modules.find((module) => module.id === moduleId);
+  const fallbackDisciplineId = disciplines[0]?.id;
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmed = title.trim();
+    if (!trimmed) {
+      return;
+    }
+    // Stamp the activity on the selected day, keeping the current time-of-day.
+    const now = new Date();
+    const occurred = new Date(`${dateKey}T00:00:00`);
+    occurred.setHours(now.getHours(), now.getMinutes(), 0, 0);
+    onAdd({
+      title: trimmed,
+      module_id: moduleId || undefined,
+      discipline_id: selectedModule ? selectedModule.discipline_id : fallbackDisciplineId,
+      activity_type: selectedModule?.type ?? "manual",
+      duration_minutes: toOptionalMinutes(duration),
+      occurred_at: occurred.toISOString(),
+      source: "manual"
+    });
+    setTitle("");
+    setOpen(false);
+  }
+
+  if (!open) {
+    return (
+      <button className="day-quick-add-trigger" type="button" onClick={() => setOpen(true)}>
+        <Plus size={15} /> הוסף פעולה ליום זה
+      </button>
+    );
+  }
+
+  return (
+    <form className="day-quick-add quick-log-form" onSubmit={submit}>
+      <label>
+        <span>מה נעשה?</span>
+        <input autoFocus dir="auto" value={title} onChange={(event) => setTitle(event.target.value)} placeholder="לדוגמה: אימון" />
+      </label>
+      <div className="form-row">
+        <label>
+          <span>Module</span>
+          <select value={moduleId} onChange={(event) => setModuleId(event.target.value)}>
+            <option value="">Atlas / כללי</option>
+            {modules.map((module) => (
+              <option key={module.id} value={module.id}>
+                {module.name} · {moduleTypeLabel(module.type)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>דקות</span>
+          <input inputMode="numeric" min="1" type="number" value={duration} onChange={(event) => setDuration(event.target.value)} />
+        </label>
+      </div>
+      <div className="activity-edit-actions">
+        <button className="quick-submit" type="submit" disabled={!title.trim()}>
+          <Plus size={15} /> הוסף
+        </button>
+        <button className="ghost-button" type="button" onClick={() => setOpen(false)}>
+          ביטול
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function JournalView({
+  activities,
+  modules,
+  disciplines,
+  onUpdateActivity,
+  onDeleteActivity,
+  onAddActivity
+}: {
+  activities: JournalActivity[];
+  modules: LifeModule[];
+  disciplines: Discipline[];
+  onUpdateActivity: (id: string, payload: ActivityUpdatePayload) => void;
+  onDeleteActivity: (id: string) => void;
+  onAddActivity: (payload: CreateActivityPayload) => void;
+}) {
   const [mode, setMode] = useState<"calendar" | "list">("calendar");
   const [cursorDate, setCursorDate] = useState(() => new Date());
   const [selectedDateKey, setSelectedDateKey] = useState(() => {
@@ -942,42 +1213,37 @@ function JournalView({ activities }: { activities: JournalActivity[] }) {
             <div className="calendar-day-list">
               {selectedActivities.length ? (
                 selectedActivities.map((activity) => (
-                  <article className="calendar-activity" key={activity.id}>
-                    <div>
-                      <strong>{activity.title}</strong>
-                      <span>
-                        {formatActivityTime(activity.occurred_at)} · {activity.module_name ?? "Atlas"} · {activity.duration_minutes ?? 0} דק׳
-                      </span>
-                    </div>
-                    <Chip accent={accentForSlug(activity.discipline_slug)}>{disciplineLabel(activity.discipline_slug, activity.discipline_name)}</Chip>
-                  </article>
+                  <EditableActivityRow
+                    key={activity.id}
+                    activity={activity}
+                    modules={modules}
+                    onUpdate={onUpdateActivity}
+                    onDelete={onDeleteActivity}
+                  />
                 ))
               ) : (
                 <p className="behavior-empty">אין פעילויות ביום הזה.</p>
               )}
             </div>
+            <DayQuickAdd dateKey={selectedDateKey} modules={modules} disciplines={disciplines} onAdd={onAddActivity} />
           </aside>
         </div>
       ) : (
         <div className="ledger-list">
-          {activities.map((activity) => (
-            <article className="ledger-row" key={activity.id}>
-              <div className="ledger-time">
-                <strong>{formatActivityTime(activity.occurred_at)}</strong>
-                <span>{new Date(activity.occurred_at).toLocaleDateString("he-IL")}</span>
-              </div>
-              <div className="ledger-main">
-                <div className="timeline-title-row">
-                  <h3>{activity.title}</h3>
-                  <Chip accent={accentForSlug(activity.discipline_slug)}>{disciplineLabel(activity.discipline_slug, activity.discipline_name)}</Chip>
-                </div>
-                <p>
-                  {activity.module_name ?? "Atlas"} · {activity.duration_minutes ?? 0} דק׳ · {activity.source}
-                </p>
-                {activity.notes ? <small>{activity.notes}</small> : null}
-              </div>
-            </article>
-          ))}
+          {activities.length ? (
+            activities.map((activity) => (
+              <EditableActivityRow
+                key={activity.id}
+                activity={activity}
+                modules={modules}
+                showDate
+                onUpdate={onUpdateActivity}
+                onDelete={onDeleteActivity}
+              />
+            ))
+          ) : (
+            <p className="behavior-empty">אין פעילויות עדיין. הוסף אחת מה־Quick Log או מהיומן.</p>
+          )}
         </div>
       )}
     </section>
@@ -2297,23 +2563,418 @@ function Modal({
   );
 }
 
+function ModuleEditCard({
+  module,
+  disciplines,
+  isSaving,
+  onSave,
+  onCancel
+}: {
+  module: LifeModule;
+  disciplines: Discipline[];
+  isSaving: boolean;
+  onSave: (payload: ModuleUpdatePayload) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(module.name);
+  const [disciplineId, setDisciplineId] = useState(module.discipline_id);
+  const [priority, setPriority] = useState(String(module.priority));
+  const [status, setStatus] = useState(module.status);
+  const [description, setDescription] = useState(module.description ?? "");
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) {
+      return;
+    }
+    onSave({
+      name: trimmed,
+      discipline_id: disciplineId,
+      priority: Number.parseInt(priority, 10) || module.priority,
+      status,
+      description: description.trim() || undefined
+    });
+  }
+
+  return (
+    <form className="quick-log-form module-edit-card" onSubmit={submit}>
+      <label>
+        <span>שם</span>
+        <input autoFocus dir="auto" value={name} onChange={(event) => setName(event.target.value)} />
+      </label>
+      <div className="form-row">
+        <label>
+          <span>תחום</span>
+          <select value={disciplineId} onChange={(event) => setDisciplineId(event.target.value)}>
+            {disciplines.map((discipline) => (
+              <option key={discipline.id} value={discipline.id}>
+                {discipline.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>עדיפות</span>
+          <input inputMode="numeric" min="1" max="5" type="number" value={priority} onChange={(event) => setPriority(event.target.value)} />
+        </label>
+      </div>
+      <label>
+        <span>סטטוס</span>
+        <select value={status} onChange={(event) => setStatus(event.target.value)}>
+          <option value="active">פעיל</option>
+          <option value="paused">מושהה</option>
+          <option value="completed">הושלם</option>
+        </select>
+      </label>
+      <label>
+        <span>תיאור</span>
+        <textarea dir="auto" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="אופציונלי" />
+      </label>
+      <div className="activity-edit-actions">
+        <button className="quick-submit" type="submit" disabled={isSaving || !name.trim()}>
+          <Save size={15} /> שמור
+        </button>
+        <button className="ghost-button" type="button" onClick={onCancel}>
+          ביטול
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function MissionCenterModal({
+  modules,
+  disciplines,
+  isSaving,
+  onCreateModule,
+  onUpdateModule,
+  onModuleStatus,
+  onClose
+}: {
+  modules: LifeModule[];
+  disciplines: Discipline[];
+  isSaving: boolean;
+  onCreateModule: (payload: ModulePayload) => void;
+  onUpdateModule: (id: string, payload: ModuleUpdatePayload) => void;
+  onModuleStatus: (id: string, action: "archive" | "pause" | "resume") => void;
+  onClose: () => void;
+}) {
+  const [creating, setCreating] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [type, setType] = useState<(typeof moduleTypes)[number]>("project");
+  const [disciplineId, setDisciplineId] = useState("");
+  const [priority, setPriority] = useState("3");
+  const [description, setDescription] = useState("");
+
+  const visible = [...modules]
+    .filter((module) => module.status !== "archived")
+    .sort((left, right) => left.priority - right.priority || left.name.localeCompare(right.name));
+  const createDisciplineId = disciplineId || disciplines[0]?.id || "";
+
+  function submitCreate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmed = name.trim();
+    const slug = slugify(trimmed);
+    if (!trimmed || !slug || !createDisciplineId) {
+      return;
+    }
+    onCreateModule({
+      name: trimmed,
+      slug,
+      type,
+      discipline_id: createDisciplineId,
+      description: description.trim() || undefined,
+      priority: Number.parseInt(priority, 10) || 3
+    });
+    setName("");
+    setDescription("");
+    setPriority("3");
+    setCreating(false);
+  }
+
+  return (
+    <Modal eyebrow="Manage missions" title="Mission Center" onClose={onClose}>
+      <div className="mission-manage">
+        {visible.length ? (
+          visible.map((module) => {
+            const discipline = disciplines.find((item) => item.id === module.discipline_id);
+            const accent = accentForSlug(discipline?.slug ?? null);
+            if (editId === module.id) {
+              return (
+                <ModuleEditCard
+                  key={module.id}
+                  module={module}
+                  disciplines={disciplines}
+                  isSaving={isSaving}
+                  onSave={(payload) => {
+                    onUpdateModule(module.id, payload);
+                    setEditId(null);
+                  }}
+                  onCancel={() => setEditId(null)}
+                />
+              );
+            }
+            return (
+              <article className="mission-card" key={module.id}>
+                <div className="mission-topline">
+                  <strong dir="auto">{module.name}</strong>
+                  <Chip accent={module.status === "active" ? accent : "neutral"}>{moduleStatusLabel(module.status)}</Chip>
+                </div>
+                <div className="next-action">
+                  <Zap size={15} />
+                  <span>
+                    {discipline?.name ?? "Atlas"} · {moduleTypeLabel(module.type)} · עדיפות {module.priority}
+                  </span>
+                </div>
+                {module.description ? <p className="mission-desc" dir="auto">{module.description}</p> : null}
+                <div className="activity-actions mission-actions">
+                  {confirmArchiveId === module.id ? (
+                    <>
+                      <button
+                        className="activity-action danger"
+                        type="button"
+                        onClick={() => {
+                          onModuleStatus(module.id, "archive");
+                          setConfirmArchiveId(null);
+                        }}
+                      >
+                        העבר לארכיון
+                      </button>
+                      <button className="activity-action" type="button" onClick={() => setConfirmArchiveId(null)}>
+                        ביטול
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button className="icon-button small" type="button" aria-label="ערוך module" onClick={() => setEditId(module.id)}>
+                        <Pencil size={15} />
+                      </button>
+                      {module.status === "active" ? (
+                        <button className="activity-action" type="button" onClick={() => onModuleStatus(module.id, "pause")}>
+                          השהה
+                        </button>
+                      ) : (
+                        <button className="activity-action" type="button" onClick={() => onModuleStatus(module.id, "resume")}>
+                          הפעל
+                        </button>
+                      )}
+                      <button className="icon-button small" type="button" aria-label="ארכיון" onClick={() => setConfirmArchiveId(module.id)}>
+                        <Archive size={15} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </article>
+            );
+          })
+        ) : (
+          <p className="behavior-empty">אין modules פעילים. צור אחד חדש למטה.</p>
+        )}
+      </div>
+
+      {creating ? (
+        <form className="quick-log-form mission-create" onSubmit={submitCreate}>
+          <label>
+            <span>שם ה־Module</span>
+            <input autoFocus dir="auto" value={name} onChange={(event) => setName(event.target.value)} placeholder="לדוגמה: ParkNet" />
+          </label>
+          <div className="form-row">
+            <label>
+              <span>סוג</span>
+              <select value={type} onChange={(event) => setType(event.target.value as (typeof moduleTypes)[number])}>
+                {moduleTypes.map((moduleType) => (
+                  <option key={moduleType} value={moduleType}>
+                    {moduleTypeLabel(moduleType)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>עדיפות</span>
+              <input inputMode="numeric" min="1" max="5" type="number" value={priority} onChange={(event) => setPriority(event.target.value)} />
+            </label>
+          </div>
+          <label>
+            <span>תחום</span>
+            <select value={createDisciplineId} onChange={(event) => setDisciplineId(event.target.value)}>
+              {disciplines.map((discipline) => (
+                <option key={discipline.id} value={discipline.id}>
+                  {discipline.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>תיאור</span>
+            <textarea dir="auto" value={description} onChange={(event) => setDescription(event.target.value)} placeholder="אופציונלי" />
+          </label>
+          <div className="activity-edit-actions">
+            <button className="quick-submit" type="submit" disabled={isSaving || !name.trim()}>
+              <Plus size={15} /> צור Module
+            </button>
+            <button className="ghost-button" type="button" onClick={() => setCreating(false)}>
+              ביטול
+            </button>
+          </div>
+        </form>
+      ) : (
+        <button className="day-quick-add-trigger" type="button" onClick={() => setCreating(true)}>
+          <Plus size={15} /> Module חדש
+        </button>
+      )}
+    </Modal>
+  );
+}
+
+function CalendarModal({
+  activities,
+  modules,
+  disciplines,
+  onUpdateActivity,
+  onDeleteActivity,
+  onAddActivity,
+  onOpenJournal,
+  onClose
+}: {
+  activities: JournalActivity[];
+  modules: LifeModule[];
+  disciplines: Discipline[];
+  onUpdateActivity: (id: string, payload: ActivityUpdatePayload) => void;
+  onDeleteActivity: (id: string) => void;
+  onAddActivity: (payload: CreateActivityPayload) => void;
+  onOpenJournal: () => void;
+  onClose: () => void;
+}) {
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedDateKey, setSelectedDateKey] = useState(() => formatDateKey(new Date()));
+
+  const today = new Date();
+  const todayKey = formatDateKey(today);
+  const anchor = new Date(today);
+  anchor.setHours(0, 0, 0, 0);
+  anchor.setDate(anchor.getDate() + weekOffset * 7);
+  const weekStart = new Date(anchor);
+  weekStart.setDate(anchor.getDate() - anchor.getDay());
+  const weekDays = Array.from({ length: 7 }, (_, index) => {
+    const day = new Date(weekStart);
+    day.setDate(weekStart.getDate() + index);
+    return day;
+  });
+
+  const activitiesByDay = activities.reduce<Record<string, JournalActivity[]>>((groups, activity) => {
+    const key = formatDateKey(new Date(activity.occurred_at));
+    groups[key] = [...(groups[key] ?? []), activity];
+    return groups;
+  }, {});
+  const selectedActivities = activitiesByDay[selectedDateKey] ?? [];
+  const selectedMinutes = selectedActivities.reduce((sum, activity) => sum + (activity.duration_minutes ?? 0), 0);
+  const selectedDate = new Date(selectedDateKey);
+  const selectedLabel = Number.isNaN(selectedDate.getTime())
+    ? "היום"
+    : new Intl.DateTimeFormat("he-IL", { weekday: "long", day: "numeric", month: "long" }).format(selectedDate);
+  const weekLabel = `${new Intl.DateTimeFormat("he-IL", { day: "numeric", month: "short" }).format(weekDays[0])} – ${new Intl.DateTimeFormat("he-IL", { day: "numeric", month: "short" }).format(weekDays[6])}`;
+
+  return (
+    <Modal eyebrow="Live calendar" title="יומן / לוח שנה" onClose={onClose}>
+      <div className="calendar-nav">
+        <button type="button" onClick={() => setWeekOffset((offset) => offset - 1)}>
+          הקודם
+        </button>
+        <strong>{weekLabel}</strong>
+        <button type="button" onClick={() => setWeekOffset((offset) => offset + 1)}>
+          הבא
+        </button>
+      </div>
+
+      <div className="dashboard-calendar-days" aria-label="Week calendar">
+        {weekDays.map((day) => {
+          const key = formatDateKey(day);
+          const dayActivities = activitiesByDay[key] ?? [];
+          return (
+            <button
+              className={`dashboard-calendar-day ${key === todayKey ? "today" : ""} ${key === selectedDateKey ? "selected" : ""} ${dayActivities.length ? "has-activity" : ""}`}
+              key={key}
+              type="button"
+              onClick={() => setSelectedDateKey(key)}
+            >
+              <span>{new Intl.DateTimeFormat("he-IL", { weekday: "short" }).format(day)}</span>
+              <strong>{day.getDate()}</strong>
+              <small>{dayActivities.length || ""}</small>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="calendar-day-summary">
+        <span>{selectedLabel}</span>
+        <strong>{selectedActivities.length} פעולות</strong>
+        <small>{selectedMinutes} דק׳</small>
+      </div>
+
+      <div className="calendar-day-list">
+        {selectedActivities.length ? (
+          selectedActivities.map((activity) => (
+            <EditableActivityRow
+              key={activity.id}
+              activity={activity}
+              modules={modules}
+              onUpdate={onUpdateActivity}
+              onDelete={onDeleteActivity}
+            />
+          ))
+        ) : (
+          <p className="behavior-empty">אין פעילויות ביום הזה.</p>
+        )}
+      </div>
+
+      <DayQuickAdd dateKey={selectedDateKey} modules={modules} disciplines={disciplines} onAdd={onAddActivity} />
+
+      <button className="modal-action" type="button" onClick={onOpenJournal}>
+        <History size={16} />
+        פתח יומן מלא
+      </button>
+    </Modal>
+  );
+}
+
 function CockpitModal({
   kind,
   dashboard,
   activities,
+  modules,
+  disciplines,
+  isSaving,
+  onCreateModule,
+  onUpdateModule,
+  onModuleStatus,
+  onUpdateActivity,
+  onDeleteActivity,
+  onAddActivity,
   onClose,
   onOpenJournal
 }: {
   kind: CockpitModalKind;
   dashboard: DashboardResponse | null;
   activities: JournalActivity[];
+  modules: LifeModule[];
+  disciplines: Discipline[];
+  isSaving: boolean;
+  onCreateModule: (payload: ModulePayload) => void;
+  onUpdateModule: (id: string, payload: ModuleUpdatePayload) => void;
+  onModuleStatus: (id: string, action: "archive" | "pause" | "resume") => void;
+  onUpdateActivity: (id: string, payload: ActivityUpdatePayload) => void;
+  onDeleteActivity: (id: string) => void;
+  onAddActivity: (payload: CreateActivityPayload) => void;
   onClose: () => void;
   onOpenJournal: () => void;
 }) {
   if (kind === "today") {
     const signals = dashboard?.real_signals;
     const recommendation = dashboard?.recommendations[0];
-    const recent = dashboard?.recent_activities.slice(0, 6) ?? [];
+    const recent = activities.slice(0, 6);
     return (
       <Modal eyebrow="Real signals only" title="סקירת היום" onClose={onClose}>
         <p className="modal-lead" dir="auto">
@@ -2332,15 +2993,13 @@ function CockpitModal({
             <h3 className="detail-section-title">פעולות אחרונות</h3>
             <div className="detail-list">
               {recent.map((activity) => (
-                <div className="detail-row" key={activity.id}>
-                  <div>
-                    <strong dir="auto">{activity.title}</strong>
-                    <span>
-                      {formatActivityTime(activity.occurred_at)} · {activity.module_name ?? activity.activity_type} · {activity.duration_minutes ?? 0} דק׳
-                    </span>
-                  </div>
-                  <Chip accent={accentForSlug(activity.discipline_slug)}>{disciplineLabel(activity.discipline_slug, activity.discipline_name)}</Chip>
-                </div>
+                <EditableActivityRow
+                  key={activity.id}
+                  activity={activity}
+                  modules={modules}
+                  onUpdate={onUpdateActivity}
+                  onDelete={onDeleteActivity}
+                />
               ))}
             </div>
           </>
@@ -2382,34 +3041,16 @@ function CockpitModal({
   }
 
   if (kind === "missions") {
-    const modules = dashboard?.active_modules ?? [];
     return (
-      <Modal eyebrow="Active modules" title="Mission Center" onClose={onClose}>
-        {modules.length ? (
-          <div className="detail-list">
-            {modules.map((module) => {
-              const summary = module.behavior?.summary ?? {};
-              const progress = summaryNumber(summary, "progress_percent", 50);
-              const accent = accentForSlug(module.discipline_slug);
-              return (
-                <article className="mission-card" key={module.id}>
-                  <div className="mission-topline">
-                    <strong>{module.name}</strong>
-                    <Chip accent={accent}>{module.status === "active" ? "פעיל" : module.status}</Chip>
-                  </div>
-                  <ProgressBar value={progress} accent={accent} />
-                  <div className="next-action">
-                    <Zap size={15} />
-                    <span>{disciplineLabel(module.discipline_slug, module.discipline_name)} · {moduleTypeLabel(module.type)}</span>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="behavior-empty">אין modules פעילים.</p>
-        )}
-      </Modal>
+      <MissionCenterModal
+        modules={modules}
+        disciplines={disciplines}
+        isSaving={isSaving}
+        onCreateModule={onCreateModule}
+        onUpdateModule={onUpdateModule}
+        onModuleStatus={onModuleStatus}
+        onClose={onClose}
+      />
     );
   }
 
@@ -2436,35 +3077,17 @@ function CockpitModal({
     );
   }
 
-  const today = new Date();
-  const weekStart = new Date(today);
-  weekStart.setHours(0, 0, 0, 0);
-  weekStart.setDate(today.getDate() - today.getDay());
-  const weekActivities = activities.filter((activity) => new Date(activity.occurred_at) >= weekStart).slice(0, 14);
   return (
-    <Modal eyebrow="This week" title="יומן השבוע" onClose={onClose}>
-      {weekActivities.length ? (
-        <div className="detail-list">
-          {weekActivities.map((activity) => (
-            <div className="detail-row" key={activity.id}>
-              <div>
-                <strong dir="auto">{activity.title}</strong>
-                <span>
-                  {new Date(activity.occurred_at).toLocaleDateString("he-IL")} · {formatActivityTime(activity.occurred_at)} · {activity.duration_minutes ?? 0} דק׳
-                </span>
-              </div>
-              <Chip accent={accentForSlug(activity.discipline_slug)}>{disciplineLabel(activity.discipline_slug, activity.discipline_name)}</Chip>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p className="behavior-empty">אין פעילויות השבוע.</p>
-      )}
-      <button className="modal-action" type="button" onClick={onOpenJournal}>
-        <History size={16} />
-        פתח יומן מלא
-      </button>
-    </Modal>
+    <CalendarModal
+      activities={activities}
+      modules={modules}
+      disciplines={disciplines}
+      onUpdateActivity={onUpdateActivity}
+      onDeleteActivity={onDeleteActivity}
+      onAddActivity={onAddActivity}
+      onOpenJournal={onOpenJournal}
+      onClose={onClose}
+    />
   );
 }
 
@@ -2571,6 +3194,36 @@ export function App() {
     }
   }
 
+  async function handleUpdateActivity(id: string, payload: ActivityUpdatePayload) {
+    setError(null);
+    try {
+      await updateActivity(id, payload);
+      await refreshDashboard();
+    } catch {
+      setError("לא הצלחתי לעדכן את הפעולה.");
+    }
+  }
+
+  async function handleDeleteActivity(id: string) {
+    setError(null);
+    try {
+      await deleteActivity(id);
+      await refreshDashboard();
+    } catch {
+      setError("לא הצלחתי למחוק את הפעולה.");
+    }
+  }
+
+  async function handleAddActivity(payload: CreateActivityPayload) {
+    setError(null);
+    try {
+      await createActivity(payload);
+      await refreshDashboard();
+    } catch {
+      setError("לא הצלחתי להוסיף פעולה.");
+    }
+  }
+
   async function handleCreateTemplate(payload: ActivityTemplatePayload) {
     setIsLogging(true);
     setError(null);
@@ -2607,6 +3260,20 @@ export function App() {
       await refreshModulesAndDashboard();
     } catch {
       setError("לא הצלחתי לעדכן Module.");
+    } finally {
+      setIsSavingModule(false);
+    }
+  }
+
+  async function handleModuleStatus(moduleId: string, action: "archive" | "pause" | "resume") {
+    setIsSavingModule(true);
+    setError(null);
+    try {
+      const call = action === "archive" ? archiveModule : action === "pause" ? pauseModule : resumeModule;
+      await call(moduleId);
+      await refreshModulesAndDashboard();
+    } catch {
+      setError("לא הצלחתי לעדכן את סטטוס ה־Module.");
     } finally {
       setIsSavingModule(false);
     }
@@ -2721,7 +3388,16 @@ export function App() {
           )
         ) : null}
 
-        {view === "journal" ? <JournalView activities={activities} /> : null}
+        {view === "journal" ? (
+          <JournalView
+            activities={activities}
+            modules={modules}
+            disciplines={disciplines}
+            onUpdateActivity={handleUpdateActivity}
+            onDeleteActivity={handleDeleteActivity}
+            onAddActivity={handleAddActivity}
+          />
+        ) : null}
 
         {view === "audit" ? <AuditView events={auditEvents} /> : null}
 
@@ -2765,6 +3441,15 @@ export function App() {
           kind={activeModal}
           dashboard={dashboard}
           activities={activities}
+          modules={modules}
+          disciplines={disciplines}
+          isSaving={isSavingModule}
+          onCreateModule={handleCreateModule}
+          onUpdateModule={handleUpdateModule}
+          onModuleStatus={handleModuleStatus}
+          onUpdateActivity={handleUpdateActivity}
+          onDeleteActivity={handleDeleteActivity}
+          onAddActivity={handleAddActivity}
           onClose={() => setActiveModal(null)}
           onOpenJournal={() => {
             setActiveModal(null);

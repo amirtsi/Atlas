@@ -10,6 +10,7 @@ export type DashboardActivity = {
   activity_type: string;
   occurred_at: string;
   duration_minutes: number | null;
+  module_id: string | null;
   discipline_name: string | null;
   discipline_slug: string | null;
   module_name: string | null;
@@ -385,6 +386,18 @@ export function updateModule(moduleId: string, payload: ModuleUpdatePayload): Pr
   });
 }
 
+export function archiveModule(moduleId: string): Promise<LifeModule> {
+  return request<LifeModule>(`/modules/${moduleId}/archive`, { method: "POST" });
+}
+
+export function pauseModule(moduleId: string): Promise<LifeModule> {
+  return request<LifeModule>(`/modules/${moduleId}/pause`, { method: "POST" });
+}
+
+export function resumeModule(moduleId: string): Promise<LifeModule> {
+  return request<LifeModule>(`/modules/${moduleId}/resume`, { method: "POST" });
+}
+
 export function getModuleBehavior(moduleId: string): Promise<ModuleBehavior> {
   return request<ModuleBehavior>(`/modules/${moduleId}/behavior`);
 }
@@ -407,6 +420,46 @@ export function quickLog(payload: QuickLogPayload): Promise<DashboardActivity> {
   return request<DashboardActivity>("/activities/quick-log", {
     method: "POST",
     body: JSON.stringify(payload)
+  });
+}
+
+export type CreateActivityPayload = {
+  title: string;
+  activity_type: string;
+  module_id?: string;
+  discipline_id?: string;
+  duration_minutes?: number;
+  notes?: string;
+  occurred_at?: string;
+  source?: string;
+};
+
+export type ActivityUpdatePayload = {
+  title?: string;
+  duration_minutes?: number | null;
+  notes?: string | null;
+  occurred_at?: string;
+  module_id?: string | null;
+  discipline_id?: string | null;
+};
+
+export function createActivity(payload: CreateActivityPayload): Promise<JournalActivity> {
+  return request<JournalActivity>("/activities", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateActivity(activityId: string, payload: ActivityUpdatePayload): Promise<JournalActivity> {
+  return request<JournalActivity>(`/activities/${activityId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function deleteActivity(activityId: string): Promise<JournalActivity> {
+  return request<JournalActivity>(`/activities/${activityId}`, {
+    method: "DELETE"
   });
 }
 

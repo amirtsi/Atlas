@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from app.core.database import row_to_dict
+from app.core.time import utc_now_iso
 
 
 def get_or_404(conn: sqlite3.Connection, table: str, item_id: str) -> dict:
@@ -32,5 +33,7 @@ def apply_update(
 
     assignments = ", ".join(f"{key} = ?" for key in updates)
     values = [json_dump(value) if isinstance(value, dict) else value for value in updates.values()]
-    conn.execute(f"UPDATE {table} SET {assignments}, updated_at = datetime('now') WHERE id = ?", (*values, item_id))
+    # tz-aware UTC ISO, consistent with utc_now_iso() everywhere else (SQLite's
+    # datetime('now') produces a naive, space-separated UTC string instead).
+    conn.execute(f"UPDATE {table} SET {assignments}, updated_at = ? WHERE id = ?", (*values, utc_now_iso(), item_id))
     return get_or_404(conn, table, item_id)

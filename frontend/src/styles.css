@@ -3192,3 +3192,173 @@ button,
 .wb-log-btn {
   justify-self: end;
 }
+
+/* ---- Activity CRUD (edit / delete / quick-add) ---- */
+.icon-button.small {
+  width: 36px;
+  height: 36px;
+}
+
+.activity-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 13px 15px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+}
+
+.activity-row.editing {
+  display: block;
+  background: var(--surface-2);
+  border-color: var(--border-bright);
+}
+
+.activity-row-main {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.activity-row-meta {
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+
+.activity-row-notes {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
+
+.activity-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.activity-action {
+  min-height: 36px;
+  padding: 0 13px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-sm);
+  color: var(--text-primary);
+  background: var(--surface-2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
+}
+
+.activity-action:hover {
+  border-color: var(--border-strong);
+}
+
+.activity-action.danger {
+  color: var(--red);
+  border-color: var(--red-soft);
+  background: var(--red-soft);
+}
+
+.activity-edit-form {
+  width: 100%;
+}
+
+.activity-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.activity-edit-actions .quick-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 46px;
+  padding: 0 18px;
+}
+
+.ghost-button {
+  min-height: 46px;
+  padding: 0 18px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  color: var(--text-secondary);
+  background: transparent;
+  font: inherit;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out);
+}
+
+.ghost-button:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.day-quick-add {
+  margin-top: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+}
+
+.day-quick-add-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: var(--sp-3);
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--r-md);
+  color: var(--text-secondary);
+  background: transparent;
+  font: inherit;
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
+}
+
+.day-quick-add-trigger:hover {
+  color: var(--text-primary);
+  border-color: var(--border-accent);
+  background: var(--accent-soft);
+}
+
+/* ---- Mission Center management ---- */
+.mission-manage {
+  display: grid;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.mission-desc {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+}
+
+.mission-actions {
+  margin-top: 10px;
+}
+
+.module-edit-card,
+.mission-create {
+  padding: var(--sp-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface-2);
+}
+
+.mission-create {
+  margin-top: var(--sp-3);
+  border-style: dashed;
+}
