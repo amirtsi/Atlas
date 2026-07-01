@@ -156,10 +156,12 @@ export function CoachModal({
     setNote(null);
     try {
       const result: ReplanResult = await replanGoal(selectedId);
-      if ("status" in result) {
-        setNote(result.status === "on_track" ? "על המסלול — אין צורך בתכנון מחדש." : "כבר ממתינה הצעת תכנון מחדש ב-Inbox.");
-      } else {
+      // Discriminate on a Proposal-only field: a real proposal has `id`; the
+      // status object has only `status` (and Proposal itself also has `status`).
+      if ("id" in result) {
         setNote("הצעת תכנון מחדש נוספה ל-Inbox.");
+      } else {
+        setNote(result.status === "on_track" ? "על המסלול — אין צורך בתכנון מחדש." : "כבר ממתינה הצעת תכנון מחדש ב-Inbox.");
       }
       await refreshAll();
     } catch (err) {
