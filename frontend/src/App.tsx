@@ -9,6 +9,7 @@ import { AuditView } from "./features/audit";
 import { CommunicationView } from "./features/communication";
 import { QuickLogSheet } from "./features/quick-log";
 import { CoachInbox } from "./features/coach-inbox";
+import { CoachModal } from "./features/coach";
 
 
 export function App() {
@@ -22,6 +23,7 @@ export function App() {
   const [communicationProviders, setCommunicationProviders] = useState<CommunicationProvider[]>([]);
   const [communicationMessages, setCommunicationMessages] = useState<CommunicationMessage[]>([]);
   const [isQuickLogOpen, setIsQuickLogOpen] = useState(false);
+  const [coachOpen, setCoachOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<CockpitModalKind | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isLogging, setIsLogging] = useState(false);
@@ -301,7 +303,7 @@ export function App() {
                   onOpen={() => setActiveModal("calendar")}
                 />
                 <NewsTile />
-                <CoachInbox onChanged={refreshDashboard} />
+                <CoachInbox onChanged={refreshDashboard} onOpen={() => setCoachOpen(true)} />
               </section>
             </>
           ) : (
@@ -377,6 +379,10 @@ export function App() {
             setView("journal");
           }}
         />
+      ) : null}
+
+      {coachOpen ? (
+        <CoachModal modules={modules} onClose={() => setCoachOpen(false)} onChanged={refreshDashboard} />
       ) : null}
     </div>
   );

@@ -3397,3 +3397,116 @@ button,
   gap: 6px;
   flex-shrink: 0;
 }
+
+/* Coach tile — active-goal plan line */
+.coach-plan-line {
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+.coach-plan-topline {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.coach-plan-topline strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.coach-plan-pct {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+.coach-plan-next,
+.coach-plan-drift {
+  margin: 0;
+  font-size: 0.82rem;
+  opacity: 0.75;
+}
+
+/* Coach modal */
+.coach-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.coach-modal-section h3 {
+  margin: 0 0 var(--sp-2);
+  font-size: 0.9rem;
+  opacity: 0.8;
+}
+.coach-goal-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-3);
+}
+.coach-goal-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: start;
+}
+.coach-goal-row.active {
+  border-color: var(--accent-green, #34d399);
+}
+.coach-goal-form {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: var(--sp-2);
+}
+.coach-goal-form input,
+.coach-goal-form select {
+  padding: var(--sp-2);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  color: inherit;
+}
+.coach-step-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+.coach-step-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+.coach-step-meta {
+  font-size: 0.78rem;
+  opacity: 0.7;
+  font-variant-numeric: tabular-nums;
+}
+.coach-plan-actions {
+  margin-top: var(--sp-3);
+  display: flex;
+  gap: var(--sp-2);
+}
+.coach-modal-note {
+  margin: 0;
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--r-sm);
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  font-size: 0.85rem;
+}
+@media (max-width: 640px) {
+  .coach-goal-form {
+    grid-template-columns: 1fr;
+  }
+}
