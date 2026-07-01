@@ -1,7 +1,12 @@
 from fastapi import APIRouter, HTTPException
 
 from app.core.database import db_connection, rows_to_dicts
-from app.modules.planning.service import create_goal, get_goal_plan, propose_plan_for_goal
+from app.modules.planning.service import (
+    create_goal,
+    generate_replan_proposal,
+    get_goal_plan,
+    propose_plan_for_goal,
+)
 from app.shared.schemas import GoalCreate, GoalOut, ProposalOut
 
 router = APIRouter(prefix="/planning", tags=["planning"])
@@ -38,3 +43,9 @@ def goal_plan(goal_id: str) -> dict:
     if result is None:
         raise HTTPException(status_code=404, detail="No plan for this goal yet")
     return result
+
+
+@router.post("/goals/{goal_id}/replan")
+def replan(goal_id: str) -> dict:
+    with db_connection() as conn:
+        return generate_replan_proposal(conn, goal_id)

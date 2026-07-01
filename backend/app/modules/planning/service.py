@@ -124,7 +124,7 @@ _DECOMPOSE_SYSTEM = (
 )
 
 
-def decompose_goal(goal: dict) -> dict | None:
+def decompose_goal(goal: dict, context: str | None = None) -> dict | None:
     """Ask the LLM to decompose a goal into steps. Returns {rationale, steps} or None
     on no-key / error. Module-level so tests monkeypatch it."""
     settings = get_settings()
@@ -137,6 +137,7 @@ def decompose_goal(goal: dict) -> dict | None:
             "definition_of_done": goal.get("definition_of_done"),
             "target_date": goal.get("target_date"),
             "capacity_minutes_per_week": goal.get("capacity_minutes_per_week"),
+            "adjustment": context,
         },
         ensure_ascii=False,
     )
@@ -242,6 +243,64 @@ def propose_plan_for_goal(conn: Connection, goal_id: str) -> dict:
         conn, "activate_plan", f"Plan for {goal['title']}",
         decomposed.get("rationale") or "Proposed plan from your goal.",
         {"plan_id": plan_id}, created_by="system",
+    )
+    conn.execute("UPDATE plans SET source_proposal_id = ? WHERE id = ?", (proposal["id"], plan_id))
+    return proposal
+
+
+def generate_replan_proposal(conn: Connection, goal_id: str) -> dict:
+    from app.modules.proposals.service import create_proposal
+
+    plan_view = get_goal_plan(conn, goal_id)
+    if plan_view is None or plan_view["plan"]["status"] != "active":
+        raise HTTPException(status_code=404, detail="Goal has no active plan to re-plan")
+    drift = plan_view["drift"]
+    if drift is not None and drift["on_track"]:
+        return {"status": "on_track"}
+    if drift is None:
+        # Check if target date is in the past; if so, treat as behind schedule
+        goal = plan_view["goal"]
+        target = _parse_iso(goal.get("target_date"))
+        now = datetime.now(UTC)
+        if not target or target >= now:
+            return {"status": "on_track"}
+    existing = conn.execute(
+        "SELECT 1 FROM proposals WHERE status = 'pending' AND type = 'activate_plan' "
+        "AND json_extract(payload, '$.plan_id') IN (SELECT id FROM plans WHERE goal_id = ?) LIMIT 1",
+        (goal_id,),
+    ).fetchone()
+    if existing:
+        return {"status": "replan_pending"}
+
+    goal = plan_view["goal"]
+    active = plan_view["plan"]
+    if drift:
+        context = (
+            f"Behind schedule: {int(drift['actual_percent'] * 100)}% done vs "
+            f"{int(drift['expected_percent'] * 100)}% expected. Produce an adjusted, realistic plan."
+        )
+    else:
+        context = "Deadline passed. Produce an adjusted, realistic plan."
+    decomposed = decompose_goal(goal, context=context)
+    if not decomposed:
+        raise HTTPException(status_code=422, detail="Re-plan decomposition unavailable (needs AI key)")
+    now = utc_now_iso()
+    plan_id = new_id()
+    conn.execute(
+        "INSERT INTO plans (id, goal_id, version, status, rationale, based_on_plan_id, created_at) "
+        "VALUES (?, ?, ?, 'proposed', ?, ?, ?)",
+        (plan_id, goal_id, int(active["version"]) + 1, decomposed.get("rationale"), active["id"], now),
+    )
+    for spec in decomposed["steps"]:
+        conn.execute(
+            "INSERT INTO plan_steps (id, plan_id, goal_id, kind, title, description, sequence, depends_on, completion_rule, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, '[]', ?, ?, ?)",
+            (new_id(), plan_id, goal_id, spec.get("kind", "topic"), spec.get("title", "Step"),
+             spec.get("description"), int(spec.get("sequence") or 0), json.dumps(_completion_rule(goal, spec)), now, now),
+        )
+    proposal = create_proposal(
+        conn, "activate_plan", f"Re-plan for {goal['title']} (v{int(active['version']) + 1})",
+        decomposed.get("rationale") or context, {"plan_id": plan_id}, created_by="system",
     )
     conn.execute("UPDATE plans SET source_proposal_id = ? WHERE id = ?", (proposal["id"], plan_id))
     return proposal
