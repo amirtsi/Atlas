@@ -1,11 +1,17 @@
 from fastapi import APIRouter, HTTPException
 
+from app.core.config import get_settings
 from app.core.database import db_connection, new_id, row_to_dict, rows_to_dicts
-from app.core.time import utc_now_iso
+from app.core.time import to_utc_iso, utc_now_iso
+
+# The validated write path lives in the service layer; the routes below call it.
+from app.modules.activity_ledger.service import insert_activity
 from app.shared.audit import record_audit_event
 from app.shared.schemas import (
     ActivityCreate,
+    ActivityOut,
     ActivityTemplateCreate,
+    ActivityTemplateOut,
     ActivityTemplateUpdate,
     ActivityUpdate,
     QuickLogCreate,
@@ -15,7 +21,7 @@ from app.shared.sql import apply_update, get_or_404, json_dump
 router = APIRouter(tags=["activity-ledger"])
 
 
-@router.get("/activities")
+@router.get("/activities", response_model=list[ActivityOut])
 def list_activities(
     discipline_id: str | None = None,
     module_id: str | None = None,
@@ -59,59 +65,13 @@ def list_activities(
         return rows_to_dicts(conn.execute(sql, params).fetchall())
 
 
-def _insert_activity(conn, payload: ActivityCreate) -> dict:
-    now = utc_now_iso()
-    activity_id = new_id()
-    occurred_at = payload.occurred_at or now
-    if payload.discipline_id:
-        get_or_404(conn, "disciplines", payload.discipline_id)
-    if payload.module_id:
-        module = get_or_404(conn, "life_modules", payload.module_id)
-        if payload.discipline_id is None:
-            payload.discipline_id = module["discipline_id"]
-    conn.execute(
-        """
-        INSERT INTO activities
-          (id, discipline_id, module_id, activity_type, title, notes, occurred_at,
-           duration_minutes, energy_level, mood_level, source, metadata, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            activity_id,
-            payload.discipline_id,
-            payload.module_id,
-            payload.activity_type,
-            payload.title,
-            payload.notes,
-            occurred_at,
-            payload.duration_minutes,
-            payload.energy_level,
-            payload.mood_level,
-            payload.source,
-            json_dump(payload.metadata),
-            now,
-            now,
-        ),
-    )
-    activity = get_or_404(conn, "activities", activity_id)
-    record_audit_event(
-        conn,
-        entity_type="activity",
-        entity_id=activity_id,
-        action="created",
-        summary=f"Logged activity: {activity['title']}",
-        changes={"title": activity["title"], "source": activity["source"], "module_id": activity["module_id"]},
-    )
-    return activity
-
-
-@router.post("/activities", status_code=201)
+@router.post("/activities", status_code=201, response_model=ActivityOut)
 def create_activity(payload: ActivityCreate) -> dict:
     with db_connection() as conn:
-        return _insert_activity(conn, payload)
+        return insert_activity(conn, payload)
 
 
-@router.post("/activities/quick-log", status_code=201)
+@router.post("/activities/quick-log", status_code=201, response_model=ActivityOut)
 def quick_log(payload: QuickLogCreate) -> dict:
     with db_connection() as conn:
         if payload.template_id:
@@ -126,7 +86,7 @@ def quick_log(payload: QuickLogCreate) -> dict:
                 source="quick_log",
                 metadata={**(template.get("default_metadata") or {}), **payload.metadata},
             )
-            return _insert_activity(conn, activity)
+            return insert_activity(conn, activity)
 
         if not payload.title or not payload.activity_type:
             raise HTTPException(status_code=422, detail="title and activity_type are required without template_id")
@@ -140,48 +100,69 @@ def quick_log(payload: QuickLogCreate) -> dict:
             source="quick_log",
             metadata=payload.metadata,
         )
-        return _insert_activity(conn, activity)
+        return insert_activity(conn, activity)
 
 
-@router.get("/activities/{activity_id}")
+@router.get("/activities/{activity_id}", response_model=ActivityOut)
 def get_activity(activity_id: str) -> dict:
     with db_connection() as conn:
         return get_or_404(conn, "activities", activity_id)
 
 
-@router.patch("/activities/{activity_id}")
+_ACTIVITY_UPDATE_FIELDS = {
+    "discipline_id",
+    "module_id",
+    "activity_type",
+    "title",
+    "notes",
+    "occurred_at",
+    "duration_minutes",
+    "energy_level",
+    "mood_level",
+    "metadata",
+}
+
+
+@router.patch("/activities/{activity_id}", response_model=ActivityOut)
 def update_activity(activity_id: str, payload: ActivityUpdate) -> dict:
+    # Only explicitly-sent fields are applied; an explicit null IS applied (so an
+    # activity can be moved back to "no module"). This is why we don't reuse
+    # apply_update here — it drops None values.
+    data = {key: value for key, value in payload.model_dump(exclude_unset=True).items() if key in _ACTIVITY_UPDATE_FIELDS}
+    if data.get("occurred_at"):
+        data["occurred_at"] = to_utc_iso(data["occurred_at"], assume_tz=get_settings().timezone)
     with db_connection() as conn:
-        updated = apply_update(
-            conn,
-            "activities",
-            activity_id,
-            payload.model_dump(exclude_unset=True),
-            {
-                "discipline_id",
-                "module_id",
-                "activity_type",
-                "title",
-                "notes",
-                "occurred_at",
-                "duration_minutes",
-                "energy_level",
-                "mood_level",
-                "metadata",
-            },
+        get_or_404(conn, "activities", activity_id)
+        # Reassigning the module must keep discipline consistent (Life Pulse and
+        # weekly balance group by discipline), unless the caller set one explicitly.
+        if "module_id" in data:
+            if data["module_id"]:
+                module = get_or_404(conn, "life_modules", data["module_id"])
+                data.setdefault("discipline_id", module["discipline_id"])
+            else:
+                data.setdefault("discipline_id", None)
+        if not data:
+            return get_or_404(conn, "activities", activity_id)
+
+        assignments = ", ".join(f"{key} = ?" for key in data)
+        values = [json_dump(value) if isinstance(value, dict) else value for value in data.values()]
+        conn.execute(
+            f"UPDATE activities SET {assignments}, updated_at = ? WHERE id = ?",
+            (*values, utc_now_iso(), activity_id),
         )
+        updated = get_or_404(conn, "activities", activity_id)
         record_audit_event(
             conn,
             entity_type="activity",
             entity_id=activity_id,
             action="updated",
             summary=f"Updated activity: {updated['title']}",
-            changes=payload.model_dump(exclude_unset=True),
+            changes=data,
         )
         return updated
 
 
-@router.delete("/activities/{activity_id}")
+@router.delete("/activities/{activity_id}", response_model=ActivityOut)
 def delete_activity(activity_id: str) -> dict:
     with db_connection() as conn:
         activity = get_or_404(conn, "activities", activity_id)
@@ -197,7 +178,7 @@ def delete_activity(activity_id: str) -> dict:
         return activity
 
 
-@router.get("/activity-templates")
+@router.get("/activity-templates", response_model=list[ActivityTemplateOut])
 def list_templates(include_inactive: bool = False) -> list[dict]:
     sql = """
     SELECT
@@ -219,7 +200,7 @@ def list_templates(include_inactive: bool = False) -> list[dict]:
         return rows_to_dicts(conn.execute(sql).fetchall())
 
 
-@router.post("/activity-templates", status_code=201)
+@router.post("/activity-templates", status_code=201, response_model=ActivityTemplateOut)
 def create_template(payload: ActivityTemplateCreate) -> dict:
     now = utc_now_iso()
     with db_connection() as conn:
@@ -260,7 +241,7 @@ def create_template(payload: ActivityTemplateCreate) -> dict:
         return template
 
 
-@router.patch("/activity-templates/{template_id}")
+@router.patch("/activity-templates/{template_id}", response_model=ActivityTemplateOut)
 def update_template(template_id: str, payload: ActivityTemplateUpdate) -> dict:
     with db_connection() as conn:
         updated = apply_update(
@@ -290,7 +271,7 @@ def update_template(template_id: str, payload: ActivityTemplateUpdate) -> dict:
         return updated
 
 
-@router.delete("/activity-templates/{template_id}")
+@router.delete("/activity-templates/{template_id}", response_model=ActivityTemplateOut)
 def deactivate_template(template_id: str) -> dict:
     with db_connection() as conn:
         get_or_404(conn, "activity_templates", template_id)

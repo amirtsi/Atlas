@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -12,6 +13,31 @@ class Settings(BaseSettings):
     timezone: str = "Asia/Jerusalem"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
     default_whatsapp_recipient: str = "972546745182"
+    # WhatsApp message classification. Empty key => rule-based classifier only
+    # (no network, no credentials). Set ATLAS_ANTHROPIC_API_KEY to enable the
+    # Claude adapter; the rule classifier stays the fallback.
+    anthropic_api_key: str = ""
+    classification_model: str = "claude-haiku-4-5"
+    log_level: str = "INFO"
+    # WhatsApp Q&A coach. Answers owner questions from real logged data using the
+    # Anthropic adapter (reuses ATLAS_ANTHROPIC_API_KEY). Disable with
+    # ATLAS_COACH_ENABLED=false — questions then fall back to a clarification reply.
+    coach_enabled: bool = True
+    coach_model: str = "claude-haiku-4-5"
+    # Automatic daily brief: an in-app scheduler sends each active provider's
+    # owner a brief built from real dashboard signals, once per day at this
+    # local (timezone) time.
+    #
+    # IMPORTANT — pick ONE trigger, not both:
+    #   * In-app scheduler (this, default) runs while the API server is up.
+    #   * The launchd job in deploy/com.atlas.dailybrief.plist runs the standalone
+    #     scripts.send_daily_brief independent of the server.
+    # Both fire at 08:00 and share the same per-provider/per-day idempotency guard,
+    # so they won't double-send, but running both is redundant and racy. If you use
+    # the launchd plist, set ATLAS_DAILY_BRIEF_ENABLED=false to turn this one off.
+    daily_brief_enabled: bool = True
+    daily_brief_hour: int = 8
+    daily_brief_minute: int = 0
 
     @property
     def resolved_database_path(self) -> Path:

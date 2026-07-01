@@ -1,11 +1,27 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from app.core.config import get_settings
-from app.core.database import db_connection, new_id, row_to_dict, rows_to_dicts
+from app.core.database import db_connection, new_id, rows_to_dicts
 from app.core.time import utc_now_iso
-from app.modules.communication.evolution import normalize_webhook_payload, normalize_whatsapp_number, send_text_message
+from app.modules.activity_ledger.service import insert_activity
+from app.modules.coach.service import answer_question
+from app.modules.communication.classifier import classify_message
+from app.modules.communication.evolution import (
+    normalize_webhook_payload,
+    normalize_whatsapp_number,
+    send_text_message,
+)
+from app.modules.communication.intent import classify_intent
+from app.modules.dashboard.service import get_today_dashboard
 from app.shared.audit import record_audit_event
-from app.shared.schemas import CommunicationMessageCreate, CommunicationProviderCreate, CommunicationProviderUpdate
+from app.shared.schemas import (
+    ActivityCreate,
+    CommunicationMessageCreate,
+    CommunicationMessageOut,
+    CommunicationProviderCreate,
+    CommunicationProviderOut,
+    CommunicationProviderUpdate,
+)
 from app.shared.sql import apply_update, get_or_404, json_dump
 
 router = APIRouter(prefix="/communication", tags=["communication"])
@@ -28,7 +44,7 @@ def _provider_config_with_defaults(config: dict) -> dict:
     return next_config
 
 
-@router.get("/providers")
+@router.get("/providers", response_model=list[CommunicationProviderOut])
 def list_providers(include_inactive: bool = False) -> list[dict]:
     sql = "SELECT * FROM communication_providers"
     if not include_inactive:
@@ -38,7 +54,7 @@ def list_providers(include_inactive: bool = False) -> list[dict]:
         return [_safe_provider(provider) for provider in rows_to_dicts(conn.execute(sql).fetchall())]
 
 
-@router.post("/providers", status_code=201)
+@router.post("/providers", status_code=201, response_model=CommunicationProviderOut)
 def create_provider(payload: CommunicationProviderCreate) -> dict:
     if payload.type not in SUPPORTED_PROVIDERS:
         raise HTTPException(status_code=422, detail="Unsupported communication provider")
@@ -67,7 +83,7 @@ def create_provider(payload: CommunicationProviderCreate) -> dict:
         return _safe_provider(provider)
 
 
-@router.patch("/providers/{provider_id}")
+@router.patch("/providers/{provider_id}", response_model=CommunicationProviderOut)
 def update_provider(provider_id: str, payload: CommunicationProviderUpdate) -> dict:
     update_payload = payload.model_dump(exclude_unset=True)
     if isinstance(update_payload.get("config"), dict):
@@ -91,7 +107,7 @@ def update_provider(provider_id: str, payload: CommunicationProviderUpdate) -> d
         return _safe_provider(provider)
 
 
-@router.get("/messages")
+@router.get("/messages", response_model=list[CommunicationMessageOut])
 def list_messages(provider_id: str | None = None, limit: int = 100, offset: int = 0) -> list[dict]:
     where: list[str] = []
     params: list[object] = []
@@ -107,7 +123,7 @@ def list_messages(provider_id: str | None = None, limit: int = 100, offset: int 
         return rows_to_dicts(conn.execute(sql, params).fetchall())
 
 
-@router.post("/messages", status_code=201)
+@router.post("/messages", status_code=201, response_model=CommunicationMessageOut)
 def send_message(payload: CommunicationMessageCreate) -> dict:
     if payload.direction != "outbound":
         raise HTTPException(status_code=422, detail="Use provider webhooks for inbound messages")
@@ -174,8 +190,164 @@ def list_webhook_events(provider_id: str | None = None, limit: int = 100, offset
         return rows_to_dicts(conn.execute(sql, params).fetchall())
 
 
+def _send_and_store_reply(conn, provider: dict, recipient: str, text: str, *, in_reply_to: str | None = None) -> str:
+    """Send an outbound WhatsApp message (dry-run safe) and persist it."""
+    now = utc_now_iso()
+    reply_id = new_id()
+    recipient = normalize_whatsapp_number(recipient)
+    result = send_text_message(provider, recipient=recipient, text=text)
+    conn.execute(
+        """
+        INSERT INTO communication_messages
+          (id, provider_id, direction, channel, recipient, sender, content_text, status,
+           provider_message_id, error, metadata, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            reply_id,
+            provider["id"],
+            "outbound",
+            provider["channel"],
+            recipient,
+            None,
+            text,
+            result.get("status", "queued"),
+            result.get("provider_message_id"),
+            result.get("error"),
+            json_dump({"auto_reply": True, "in_reply_to": in_reply_to, "provider_response": result.get("response")}),
+            now,
+            now,
+        ),
+    )
+    return reply_id
+
+
+def _handle_owner_message(conn, provider: dict, inbound_message_id: str | None, normalized: dict, sender: str, now: str) -> dict:
+    """Answer owner questions from real data; otherwise classify + log when confident."""
+    text = normalized["content_text"]
+    settings = get_settings()
+
+    if settings.coach_enabled and classify_intent(text) == "question":
+        coach = answer_question(text)
+        reply_message_id = _send_and_store_reply(conn, provider, sender, coach["answer"], in_reply_to=inbound_message_id)
+        if inbound_message_id:
+            conn.execute(
+                "UPDATE communication_messages SET metadata = ?, updated_at = ? WHERE id = ?",
+                (
+                    json_dump(
+                        {
+                            "raw_event_type": normalized["event_type"],
+                            "intent": "question",
+                            "ai_generated": True,
+                            "coach_method": coach["method"],
+                        }
+                    ),
+                    now,
+                    inbound_message_id,
+                ),
+            )
+        return {
+            "matched": False,
+            "module_id": None,
+            "module_name": None,
+            "discipline_id": None,
+            "activity_type": None,
+            "title": None,
+            "duration_minutes": None,
+            "confidence": 0.0,
+            "method": f"coach:{coach['method']}",
+            "intent": "question",
+            "reply_text": coach["answer"],
+            "activity_id": None,
+            "reply_message_id": reply_message_id,
+        }
+
+    result = classify_message(conn, provider, text)
+
+    activity_id = None
+    if result["matched"]:
+        activity = insert_activity(
+            conn,
+            ActivityCreate(
+                module_id=result["module_id"],
+                discipline_id=result["discipline_id"],
+                activity_type=result["activity_type"],
+                title=result["title"],
+                duration_minutes=result["duration_minutes"],
+                source="whatsapp",
+                metadata={
+                    "channel": "whatsapp",
+                    "classified_by": result["method"],
+                    "confidence": result["confidence"],
+                    "inbound_message_id": inbound_message_id,
+                },
+            ),
+        )
+        activity_id = activity["id"]
+
+    reply_message_id = _send_and_store_reply(conn, provider, sender, result["reply_text"], in_reply_to=inbound_message_id)
+
+    if inbound_message_id:
+        conn.execute(
+            "UPDATE communication_messages SET metadata = ?, updated_at = ? WHERE id = ?",
+            (
+                json_dump(
+                    {
+                        "raw_event_type": normalized["event_type"],
+                        "classification": {
+                            "matched": result["matched"],
+                            "module_id": result["module_id"],
+                            "method": result["method"],
+                            "confidence": result["confidence"],
+                        },
+                        "activity_id": activity_id,
+                    }
+                ),
+                now,
+                inbound_message_id,
+            ),
+        )
+
+    return {**result, "activity_id": activity_id, "reply_message_id": reply_message_id}
+
+
+def _public_classification(classification: dict | None) -> dict | None:
+    if classification is None:
+        return None
+    return {
+        "matched": classification["matched"],
+        "module_id": classification["module_id"],
+        "module_name": classification.get("module_name"),
+        "activity_id": classification.get("activity_id"),
+        "method": classification["method"],
+        "confidence": classification["confidence"],
+        "reply_message_id": classification.get("reply_message_id"),
+    }
+
+
+def _already_recorded(conn, provider_id: str, provider_message_id: str | None) -> bool:
+    """Idempotency + loop guard: have we already stored this exact message?
+
+    Catches Evolution re-deliveries and — crucially for "Note to Self" — Atlas's
+    own auto-replies bouncing back as fromMe self-messages (we stored each reply
+    with its provider_message_id when we sent it)."""
+    if not provider_message_id:
+        return False
+    row = conn.execute(
+        "SELECT 1 FROM communication_messages WHERE provider_id = ? AND provider_message_id = ? LIMIT 1",
+        (provider_id, provider_message_id),
+    ).fetchone()
+    return row is not None
+
+
+def _looks_like_atlas_reply(text: str | None) -> bool:
+    """Backup loop guard for when the bounced message carries no provider id."""
+    stripped = (text or "").lstrip()
+    return stripped.startswith("✅") or stripped.startswith("☀️")
+
+
 @router.post("/providers/{provider_id}/webhooks/evolution", status_code=202)
-def receive_evolution_webhook(provider_id: str, payload: dict) -> dict:
+def receive_evolution_webhook(provider_id: str, payload: dict, request: Request, token: str | None = None) -> dict:
     now = utc_now_iso()
     webhook_id = new_id()
     with db_connection() as conn:
@@ -183,9 +355,29 @@ def receive_evolution_webhook(provider_id: str, payload: dict) -> dict:
         if provider["type"] != "evolution":
             raise HTTPException(status_code=422, detail="Provider is not an Evolution provider")
 
+        config = provider.get("config") or {}
+        # Security: when a webhook secret is configured, reject unauthenticated calls.
+        secret = config.get("webhook_secret")
+        if secret:
+            provided = token or request.headers.get("x-atlas-webhook-token")
+            if provided != secret:
+                raise HTTPException(status_code=401, detail="Invalid webhook token")
+
         normalized = normalize_webhook_payload(payload)
+        owner = normalize_whatsapp_number(str(config.get("default_recipient") or ""))
+        sender = normalize_whatsapp_number(str(normalized["sender"] or ""))
+        is_owner = bool(owner) and sender == owner
+
+        # Loop/idempotency guard. With the "Note to Self" setup the owner texts
+        # their own number, so every message — including Atlas's own ✅/☀️ replies —
+        # comes back as a fromMe self-message. Skip anything we've already stored
+        # (Evolution re-deliveries and our own outbound replies bouncing back),
+        # with a text-prefix fallback for replies that carry no provider id.
+        already_seen = _already_recorded(conn, provider_id, normalized["provider_message_id"])
+        is_self_reply = _looks_like_atlas_reply(normalized["content_text"])
+
         message_id = None
-        if normalized["content_text"]:
+        if normalized["content_text"] and not already_seen:
             message_id = new_id()
             conn.execute(
                 """
@@ -210,6 +402,15 @@ def receive_evolution_webhook(provider_id: str, payload: dict) -> dict:
                 ),
             )
 
+        # Security: only act on the owner's own number. Other senders are stored
+        # for audit but never classified, never logged, and never replied to.
+        # Direction-agnostic: works for "Note to Self" (fromMe self-message) and a
+        # separate sender number alike — the owner allowlist + loop guard are what
+        # gate processing, not whether WhatsApp tagged the message inbound/outbound.
+        classification = None
+        if is_owner and normalized["content_text"] and not already_seen and not is_self_reply:
+            classification = _handle_owner_message(conn, provider, message_id, normalized, sender, now)
+
         conn.execute(
             """
             INSERT INTO communication_webhook_events
@@ -224,6 +425,73 @@ def receive_evolution_webhook(provider_id: str, payload: dict) -> dict:
             entity_id=webhook_id,
             action="received",
             summary=f"Received Evolution webhook: {normalized['event_type']}",
-            changes={"message_id": message_id, "provider_id": provider_id},
+            changes={
+                "message_id": message_id,
+                "provider_id": provider_id,
+                "matched": classification["matched"] if classification else None,
+            },
         )
-        return {"status": "accepted", "webhook_event_id": webhook_id, "message_id": message_id}
+        return {
+            "status": "accepted",
+            "webhook_event_id": webhook_id,
+            "message_id": message_id,
+            "classification": _public_classification(classification),
+        }
+
+
+def _compose_daily_brief(dashboard: dict) -> str:
+    signals = dashboard.get("real_signals") or {}
+    recommendations = dashboard.get("recommendations") or []
+    lines = ["☀️ אטלס — סיכום יומי"]
+    if recommendations:
+        top = recommendations[0]
+        lines.append(f"⭐ {top['title']}\n{top['body']}")
+    lines.append(
+        f"היום: {signals.get('today_activity_count', 0)} פעולות · "
+        f"{signals.get('today_duration_minutes', 0)} דק׳"
+    )
+    lines.append(
+        f"השבוע: {signals.get('week_activity_count', 0)} פעולות · "
+        f"{signals.get('week_duration_minutes', 0)} דק׳"
+    )
+    return "\n\n".join(lines)
+
+
+@router.post("/providers/{provider_id}/daily-brief")
+def send_daily_brief(provider_id: str) -> dict:
+    """Build the day's brief from real dashboard signals and send it to the owner."""
+    dashboard = get_today_dashboard()
+    text = _compose_daily_brief(dashboard)
+    with db_connection() as conn:
+        provider = get_or_404(conn, "communication_providers", provider_id)
+        if provider["type"] != "evolution":
+            raise HTTPException(status_code=422, detail="Provider is not an Evolution provider")
+        recipient = normalize_whatsapp_number(str((provider.get("config") or {}).get("default_recipient") or ""))
+        if not recipient:
+            raise HTTPException(status_code=422, detail="Provider has no owner recipient configured")
+        message_id = _send_and_store_reply(conn, provider, recipient, text)
+        record_audit_event(
+            conn,
+            entity_type="communication_message",
+            entity_id=message_id,
+            action="daily_brief",
+            summary=f"Sent daily brief via {provider['name']}",
+            changes={"recipient": recipient},
+        )
+        return {"status": "sent", "message_id": message_id, "recipient": recipient, "preview": text}
+
+
+@router.get("/daily-brief/schedule")
+def daily_brief_schedule() -> dict:
+    """Show whether the automatic daily brief is armed and when it next fires."""
+    from app.modules.communication.scheduler import next_run_at
+
+    settings = get_settings()
+    enabled = settings.daily_brief_enabled
+    return {
+        "enabled": enabled,
+        "time": f"{settings.daily_brief_hour:02d}:{settings.daily_brief_minute:02d}",
+        "timezone": settings.timezone,
+        "next_run": next_run_at(settings).isoformat() if enabled else None,
+        "preview": _compose_daily_brief(get_today_dashboard()),
+    }
