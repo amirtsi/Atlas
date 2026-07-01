@@ -1,4 +1,5 @@
-import { Maximize2 } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { Maximize2, X } from "lucide-react";
 
 import type { Accent } from "../api/atlas";
 
@@ -67,5 +68,59 @@ export function Panel({
         {children}
       </div>
     </section>
+  );
+}
+
+export function Modal({
+  eyebrow,
+  title,
+  onClose,
+  children
+}: {
+  eyebrow?: string;
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const sheetRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    sheetRef.current?.focus();
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      previouslyFocused?.focus?.();
+    };
+  }, [onClose]);
+
+  return (
+    <div className="modal-overlay" role="presentation" onClick={onClose}>
+      <div
+        className="modal-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        tabIndex={-1}
+        ref={sheetRef}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <header className="modal-header">
+          <div>
+            {eyebrow ? <span>{eyebrow}</span> : null}
+            <h2 dir="auto">{title}</h2>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="סגור">
+            <X size={20} />
+          </button>
+        </header>
+        <div className="modal-body">{children}</div>
+      </div>
+    </div>
   );
 }

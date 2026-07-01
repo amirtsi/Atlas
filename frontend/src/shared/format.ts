@@ -108,3 +108,15 @@ export function slugify(value: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
 }
+
+export function severityAccent(severity: string): Accent {
+  if (severity === "critical") return "red";
+  if (severity === "warning") return "orange";
+  return "blue";
+}
+
+export function severityLabel(severity: string): string {
+  if (severity === "critical") return "דחוף";
+  if (severity === "warning") return "דורש תשומת לב";
+  return "המלצה";
+}
