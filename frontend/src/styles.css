@@ -3362,3 +3362,38 @@ button,
   margin-top: var(--sp-3);
   border-style: dashed;
 }
+
+.coach-inbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.coach-proposal {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.coach-proposal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.coach-proposal-body strong {
+  font-size: 0.95rem;
+}
+
+.coach-proposal-body p {
+  margin: 0;
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+.coach-proposal-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}

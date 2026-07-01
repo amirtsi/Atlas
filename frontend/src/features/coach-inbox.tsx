@@ -6,12 +6,19 @@ import { Panel } from "../shared/ui";
 
 export function CoachInbox({ onChanged }: { onChanged?: () => void }) {
   const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [resolving, setResolving] = useState<string | null>(null);
 
   async function load() {
+    setError(false);
     try {
       setProposals(await getProposals("pending"));
     } catch {
+      setError(true);
       setProposals([]);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -20,18 +27,32 @@ export function CoachInbox({ onChanged }: { onChanged?: () => void }) {
   }, []);
 
   async function resolve(id: string, action: "accept" | "dismiss") {
-    if (action === "accept") {
-      await acceptProposal(id);
-    } else {
-      await dismissProposal(id);
+    if (resolving) {
+      return;
     }
-    await load();
-    onChanged?.();
+    setResolving(id);
+    try {
+      if (action === "accept") {
+        await acceptProposal(id);
+      } else {
+        await dismissProposal(id);
+      }
+      await load();
+      onChanged?.();
+    } catch {
+      setError(true);
+    } finally {
+      setResolving(null);
+    }
   }
 
   return (
     <Panel title="Coach" eyebrow="Proposals — you approve" className="coach-inbox-panel">
-      {proposals.length ? (
+      {loading ? (
+        <p className="empty-panel-copy">טוען הצעות…</p>
+      ) : error ? (
+        <p className="empty-panel-copy">לא ניתן לטעון הצעות כרגע.</p>
+      ) : proposals.length ? (
         <div className="coach-inbox-list">
           {proposals.slice(0, 4).map((proposal) => (
             <article className="coach-proposal" key={proposal.id}>
@@ -40,10 +61,22 @@ export function CoachInbox({ onChanged }: { onChanged?: () => void }) {
                 {proposal.rationale ? <p dir="auto">{proposal.rationale}</p> : null}
               </div>
               <div className="coach-proposal-actions">
-                <button className="icon-button small" type="button" aria-label="אשר" onClick={() => resolve(proposal.id, "accept")}>
+                <button
+                  className="icon-button small"
+                  type="button"
+                  aria-label="אשר"
+                  disabled={resolving === proposal.id}
+                  onClick={() => resolve(proposal.id, "accept")}
+                >
                   <Check size={15} />
                 </button>
-                <button className="icon-button small" type="button" aria-label="דחה" onClick={() => resolve(proposal.id, "dismiss")}>
+                <button
+                  className="icon-button small"
+                  type="button"
+                  aria-label="דחה"
+                  disabled={resolving === proposal.id}
+                  onClick={() => resolve(proposal.id, "dismiss")}
+                >
                   <X size={15} />
                 </button>
               </div>
