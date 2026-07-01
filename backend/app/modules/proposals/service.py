@@ -7,6 +7,7 @@ validated life_modules service. Every transition is audited.
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from sqlite3 import Connection
 
 from fastapi import HTTPException
@@ -109,3 +110,43 @@ def dismiss_proposal(conn: Connection, proposal_id: str) -> dict:
         changes={},
     )
     return updated
+
+
+def _has_pending(conn: Connection, type: str, module_id: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM proposals WHERE status = 'pending' AND type = ? "
+        "AND json_extract(payload, '$.module_id') = ? LIMIT 1",
+        (type, module_id),
+    ).fetchone()
+    return row is not None
+
+
+def generate_module_proposals(conn: Connection) -> list[dict]:
+    """Honest heuristic: an active module with no activity in 14 days -> propose archive.
+    Idempotent (skips modules that already have a pending archive proposal)."""
+    cutoff = (datetime.now(UTC) - timedelta(days=14)).replace(microsecond=0).isoformat()
+    stale = conn.execute(
+        """
+        SELECT lm.id, lm.name FROM life_modules lm
+        WHERE lm.status = 'active'
+          AND NOT EXISTS (
+            SELECT 1 FROM activities a WHERE a.module_id = lm.id AND a.occurred_at >= ?
+          )
+        ORDER BY lm.name
+        """,
+        (cutoff,),
+    ).fetchall()
+    created: list[dict] = []
+    for module in stale:
+        if _has_pending(conn, "set_module_status", module["id"]):
+            continue
+        created.append(
+            create_proposal(
+                conn,
+                "set_module_status",
+                f"Archive {module['name']}? No activity in 14 days",
+                "No logged activity in the last 14 days — archive to keep the active set focused.",
+                {"module_id": module["id"], "status": "archived"},
+            )
+        )
+    return created
