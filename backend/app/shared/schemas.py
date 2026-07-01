@@ -308,3 +308,23 @@ class CommunicationMessageOut(AtlasResponse):
     metadata: dict[str, Any] | None = None
     created_at: str | None = None
     updated_at: str | None = None
+
+
+class ProposalCreate(AtlasModel):
+    type: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    rationale: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    created_by: str = "system"
+
+
+class ProposalOut(AtlasResponse):
+    id: str
+    type: str | None = None
+    title: str | None = None
+    rationale: str | None = None
+    payload: dict[str, Any] | None = None
+    status: str | None = None
+    created_by: str | None = None
+    created_at: str | None = None
+    resolved_at: str | None = None
