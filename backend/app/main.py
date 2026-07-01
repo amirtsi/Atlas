@@ -16,6 +16,7 @@ from app.modules.disciplines.router import router as disciplines_router
 from app.modules.learning.router import router as learning_router
 from app.modules.life_modules.router import router as modules_router
 from app.modules.metrics.router import router as metrics_router
+from app.modules.planning.router import router as planning_router
 from app.modules.project.router import router as project_router
 from app.modules.proposals.router import router as proposals_router
 from app.modules.wellbeing.router import router as wellbeing_router
@@ -65,6 +66,7 @@ def create_app() -> FastAPI:
     app.include_router(communication_router, prefix="/api/v1")
     app.include_router(metrics_router, prefix="/api/v1")
     app.include_router(dashboard_router, prefix="/api/v1")
+    app.include_router(planning_router, prefix="/api/v1")
     app.include_router(proposals_router, prefix="/api/v1")
     return app
 

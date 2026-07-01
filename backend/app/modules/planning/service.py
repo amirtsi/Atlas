@@ -178,6 +178,29 @@ def _completion_rule(goal: dict, step_spec: dict) -> dict:
     return rule
 
 
+def get_goal_plan(conn: Connection, goal_id: str) -> dict | None:
+    goal = get_or_404(conn, "goals", goal_id)
+    plan_id = goal["active_plan_id"]
+    if not plan_id:
+        row = conn.execute(
+            "SELECT id FROM plans WHERE goal_id = ? ORDER BY version DESC, created_at DESC LIMIT 1", (goal_id,)
+        ).fetchone()
+        plan_id = row["id"] if row else None
+    if not plan_id:
+        return None
+    plan = get_or_404(conn, "plans", plan_id)
+    from app.core.database import rows_to_dicts
+
+    steps = rows_to_dicts(
+        conn.execute("SELECT * FROM plan_steps WHERE plan_id = ? ORDER BY sequence, created_at", (plan_id,)).fetchall()
+    )
+    for step in steps:
+        step["progress"] = evaluate_step(conn, step)
+    done = sum(1 for s in steps if s["progress"]["status"] == "done")
+    overall = round(100 * done / len(steps)) if steps else 0
+    return {"goal": goal, "plan": plan, "steps": steps, "overall_percent": overall}
+
+
 def propose_plan_for_goal(conn: Connection, goal_id: str) -> dict:
     from app.modules.proposals.service import create_proposal
 
