@@ -138,7 +138,7 @@ def propose_plan(goal_id: str) -> dict:
 
     try:
         with db_connection() as conn:
-            return _propose_plan_for_goal(conn, goal_id)
+            return _propose_plan_for_goal(conn, goal_id, created_by="hermes")
     except HTTPException as exc:
         return {"error": exc.detail, "status_code": exc.status_code}
 
@@ -149,7 +149,7 @@ def request_replan(goal_id: str) -> dict:
 
     try:
         with db_connection() as conn:
-            result = _generate_replan_proposal(conn, goal_id)
+            result = _generate_replan_proposal(conn, goal_id, created_by="hermes")
     except HTTPException as exc:
         return {"error": exc.detail, "status_code": exc.status_code}
     return result if result is not None else {"status": "on_track"}

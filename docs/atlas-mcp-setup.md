@@ -45,7 +45,8 @@ Point your MCP client at the module entrypoint. Example config shape:
 Reads: `atlas_snapshot`, `list_modules`, `list_goals`, `get_goal_plan`,
 `recent_activities`, `list_proposals`.
 
-Propose-only writes (create `pending` proposals; nothing applies until you accept):
-`propose_module_status`, `propose_module_priority` (tagged `created_by="hermes"`),
-`propose_plan`, `request_replan` (routed through the planning service, so their
-proposals are `created_by="system"`; a `created_by` passthrough is a P4b fast-follow).
+Propose-only writes (create `pending` proposals, `created_by="hermes"`; nothing
+applies until you accept): `propose_module_status`, `propose_module_priority`,
+`propose_plan`, `request_replan`. Plan/re-plan proposals are also tagged
+`created_by="hermes"` (the planning service takes a `created_by` passthrough); the
+`/planning/**` REST endpoints still default to `created_by="system"`.
