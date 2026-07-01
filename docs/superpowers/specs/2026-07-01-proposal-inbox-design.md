@@ -87,6 +87,35 @@ create → status=pending
 Accept/dismiss on a non-pending proposal → 409. Accept whose payload references a missing
 module → 404 (proposal stays pending). Unknown type → 422.
 
+**Dispatch is a handler registry, not a conditional (OCP).** Accept looks the type up in
+a `dict[str, ProposalHandler]` and calls the handler; adding a new type (P2's plan, a
+P4 Hermes type) registers a handler without editing the dispatcher:
+
+```python
+ProposalHandler = Callable[[Connection, dict], dict]  # (conn, payload) -> changed entity
+
+_HANDLERS: dict[str, ProposalHandler] = {
+    "set_module_priority": _apply_set_module_priority,
+    "set_module_status": _apply_set_module_status,
+    # P2 adds: "activate_plan": _apply_activate_plan   (no change to accept_proposal)
+}
+
+def accept_proposal(conn, proposal_id) -> dict:
+    proposal = get_or_404(conn, "proposals", proposal_id)
+    if proposal["status"] != "pending":
+        raise HTTPException(409, "Proposal already resolved")
+    handler = _HANDLERS.get(proposal["type"])
+    if handler is None:
+        raise HTTPException(422, "Unknown proposal type")
+    handler(conn, proposal["payload"])          # applies via life_modules service (may 404)
+    # mark accepted + resolved_at + audit
+    return updated_proposal
+```
+
+The two P1 handlers (`_apply_set_module_priority`, `_apply_set_module_status`) are thin
+wrappers over the `life_modules` service functions (§7). `create_proposal` validates the
+type is a known handler key up front, so an unknown type is rejected at create too.
+
 ## 7. `life_modules` service extraction (small, in-pattern)
 
 So accept applies changes through validated logic (not raw SQL, not a router reach-in):
