@@ -310,9 +310,12 @@ def _parse_iso(value: str | None):
     if not value:
         return None
     try:
-        return datetime.fromisoformat(value)
+        dt = datetime.fromisoformat(value)
     except ValueError:
         return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+    return dt
 
 
 def compute_drift(goal: dict, plan: dict, actual_percent: float) -> dict | None:
@@ -329,7 +332,7 @@ def compute_drift(goal: dict, plan: dict, actual_percent: float) -> dict | None:
     drift = round(actual_percent - expected, 3)
     projected = None
     if actual_percent > 0:
-        projected = (activated + (now - activated) / actual_percent).isoformat()
+        projected = (activated + (now - activated) / actual_percent).replace(microsecond=0).isoformat()
     return {
         "expected_percent": round(expected, 3),
         "actual_percent": round(actual_percent, 3),
