@@ -1,59 +1,85 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Compass, X } from "lucide-react";
+import {
+  Activity,
+  ArrowLeft,
+  ArrowRight,
+  CalendarDays,
+  Check,
+  CheckCircle2,
+  Clock,
+  Compass,
+  LayoutGrid,
+  type LucideIcon,
+  Layers3,
+  Newspaper,
+  Sparkles,
+  Zap,
+  X
+} from "lucide-react";
 
 import { advance, computeTooltipPosition, type Rect } from "./onboarding-logic";
 
-type TourStep = { selector?: string; title: string; body: string };
+type TourStep = { selector?: string; title: string; body: string; icon: LucideIcon };
 
 // Anchors to existing class hooks — no changes to the tiles themselves.
 const TOUR_STEPS: TourStep[] = [
   {
+    icon: Compass,
     title: "ברוך הבא ל-Atlas",
-    body: "Atlas הוא ה-Life OS שלך — הכול מבוסס על נתונים אמיתיים בלבד. סיור קצר יעבור על כל היכולות."
+    body: "Atlas הוא ה-Life OS שלך — כל מה שתראה כאן מבוסס על נתונים אמיתיים בלבד, בלי המצאות. סיור קצר (דקה) יעבור על כל היכולות."
   },
   {
     selector: ".tile-hero",
+    icon: Sparkles,
     title: "מרכז הפיקוד",
-    body: "הדבר הכי נכון לעשות עכשיו, לצד התוכנית הפעילה והצעות המאמן. לחיצה פותחת את מרכז הפיקוד המלא."
+    body: "הדבר הכי נכון לעשות עכשיו — לצד התוכנית הפעילה (התקדמות, סטייה, הצעד הבא) והצעות המאמן לאישור. לחיצה פותחת את מרכז הפיקוד המלא."
   },
   {
     selector: ".life-pulse-panel",
+    icon: Activity,
     title: "מאזן שבועי",
-    body: "Life Pulse מראה את האיזון בין תחומי החיים מתוך הפעילות שנרשמה השבוע."
+    body: "Life Pulse מראה כמה מאוזנים תחומי החיים שלך השבוע — מחושב מהפעילות שרשמת, לא מהערכה."
   },
   {
     selector: ".mission-panel",
+    icon: Layers3,
     title: "Mission Center",
-    body: "המודולים הפעילים שלך וההתקדמות האמיתית בכל אחד מהם."
+    body: "המודולים הפעילים שלך (3–5 במיקוד) וההתקדמות האמיתית בכל אחד מהם."
   },
   {
     selector: ".timeline-panel",
+    icon: Clock,
     title: "ציר הזמן",
-    body: "כל הפעולות האמיתיות שרשמת היום, לפי שעה."
+    body: "כל הפעולות האמיתיות שרשמת היום, לפי שעה — התיעוד שממנו הכול נגזר."
   },
   {
     selector: ".dashboard-calendar-panel",
+    icon: CalendarDays,
     title: "לוח שנה",
-    body: "מבט חודשי על הפעילות; לחיצה על יום פותחת פירוט מלא."
+    body: "מבט חודשי על הפעילות; לחיצה על יום פותחת את הפירוט המלא שלו."
   },
   {
     selector: ".news-panel",
+    icon: Newspaper,
     title: "חדשות וציטוט",
-    body: "Hacker News וציטוט יומי — ההקשר סביב היום שלך."
+    body: "Hacker News וציטוט יומי — קצת הקשר וטון סביב היום שלך."
   },
   {
     selector: ".rail-log",
+    icon: Zap,
     title: "רישום מהיר",
-    body: "כאן נותנים ל-Atlas signal: מתעדים פעילות אמיתית בכמה שניות."
+    body: "הלב של המערכת: מתעדים כאן פעילות אמיתית בכמה שניות, וזה מזין את כל התובנות."
   },
   {
     selector: ".rail-nav",
+    icon: LayoutGrid,
     title: "ניווט",
-    body: "מכאן מגיעים ליומן, מודולים, Audit ותקשורת (WhatsApp)."
+    body: "מכאן עוברים ליומן המלא, למודולים, ל-Audit ולתקשורת (WhatsApp)."
   },
   {
-    title: "סיימת את הסיור",
-    body: "אפשר להריץ אותו שוב בכל עת מכפתור הסיור בסרגל הצד. עכשיו — נסה לרשום פעולה אחת אמיתית."
+    icon: CheckCircle2,
+    title: "אפשר להתחיל",
+    body: "זהו — הכרת את Atlas. אפשר להריץ את הסיור שוב בכל עת מכפתור «סיור» בסרגל הצד. הצעד הבא: רשום פעולה אחת אמיתית."
   }
 ];
 
@@ -106,6 +132,8 @@ export function OnboardingTour({ onClose }: { onClose: () => void }) {
   }, [total, onClose]);
 
   const pad = 6;
+  const StepIcon = step.icon;
+  const isCentered = !rect;
 
   return (
     <div className="tour-overlay" role="presentation">
@@ -119,7 +147,7 @@ export function OnboardingTour({ onClose }: { onClose: () => void }) {
       )}
 
       <div
-        className="tour-tooltip"
+        className={`tour-tooltip ${isCentered ? "tour-tooltip-centered" : ""}`}
         ref={tooltipRef}
         role="dialog"
         aria-modal="true"
@@ -129,13 +157,19 @@ export function OnboardingTour({ onClose }: { onClose: () => void }) {
       >
         <div className="tour-tooltip-head">
           <span className="tour-eyebrow">
-            <Compass size={14} />
+            <StepIcon size={14} />
             סיור Atlas · {index + 1}/{total}
           </span>
           <button className="icon-button small" type="button" aria-label="דלג על הסיור" onClick={onClose}>
             <X size={15} />
           </button>
         </div>
+
+        {isCentered ? (
+          <div className="tour-hero-icon" aria-hidden="true">
+            <StepIcon size={26} />
+          </div>
+        ) : null}
 
         <h3 dir="auto">{step.title}</h3>
         <p dir="auto">{step.body}</p>
