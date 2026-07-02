@@ -16,6 +16,8 @@ from app.modules.disciplines.router import router as disciplines_router
 from app.modules.learning.router import router as learning_router
 from app.modules.life_modules.router import router as modules_router
 from app.modules.metrics.router import router as metrics_router
+from app.modules.obsidian.router import router as obsidian_router
+from app.modules.obsidian.scheduler import run_obsidian_export_scheduler
 from app.modules.planning.router import router as planning_router
 from app.modules.project.router import router as project_router
 from app.modules.proposals.router import router as proposals_router
@@ -31,11 +33,14 @@ async def lifespan(app: FastAPI):
     initialize_database()
     logger.info("Atlas API starting (env=%s)", settings.env)
     scheduler_task = asyncio.create_task(run_daily_brief_scheduler())
+    obsidian_task = asyncio.create_task(run_obsidian_export_scheduler())
     app.state.scheduler_task = scheduler_task
+    app.state.obsidian_task = obsidian_task
     try:
         yield
     finally:
         scheduler_task.cancel()
+        obsidian_task.cancel()
         logger.info("Atlas API shutting down")
 
 
@@ -68,6 +73,7 @@ def create_app() -> FastAPI:
     app.include_router(dashboard_router, prefix="/api/v1")
     app.include_router(planning_router, prefix="/api/v1")
     app.include_router(proposals_router, prefix="/api/v1")
+    app.include_router(obsidian_router, prefix="/api/v1")
     return app
 
 
