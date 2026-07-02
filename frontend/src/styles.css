@@ -625,8 +625,95 @@ button,
 
 .hero-content {
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto 1fr auto;
+  gap: var(--sp-3);
+  min-height: 0;
+}
+
+.hero-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: var(--sp-4);
+  min-height: 0;
+}
+
+.hero-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.hero-aside {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding-inline-start: var(--sp-4);
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+.hero-coach {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-height: 0;
+}
+
+.hero-coach .coach-plan-line {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.hero-coach-inbox {
+  display: flex;
+  flex-direction: column;
   gap: var(--sp-2);
+}
+
+.hero-coach-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.hero-coach-label svg {
+  color: var(--accent);
+}
+
+/* Command Center — recommendations section */
+.coach-reco-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.coach-reco {
+  padding: var(--sp-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+}
+
+.coach-reco-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.coach-reco p {
+  margin: var(--sp-1) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
 }
 
 .hero-head {
@@ -2637,6 +2724,18 @@ button,
     grid-template-rows: minmax(0, 1fr) auto;
   }
 
+  .hero-top {
+    grid-template-columns: 1fr;
+    gap: var(--sp-3);
+  }
+
+  .hero-aside {
+    padding-inline-start: 0;
+    padding-top: var(--sp-3);
+    border-inline-start: 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+
   .workspace {
     grid-row: 1;
     height: auto;
@@ -3413,11 +3512,23 @@ button,
   gap: var(--sp-2);
 }
 .coach-plan-topline strong {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.coach-plan-goal {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.coach-plan-goal svg {
+  flex: 0 0 auto;
+  color: var(--accent);
 }
 .coach-plan-pct {
   font-variant-numeric: tabular-nums;
@@ -3508,5 +3619,17 @@ button,
 @media (max-width: 640px) {
   .coach-goal-form {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Respect users who prefer reduced motion (accessibility) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

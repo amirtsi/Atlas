@@ -8,7 +8,6 @@ import { LifePulse, MissionCenter, LifeTimeline, DashboardCalendar, RightNowHero
 import { AuditView } from "./features/audit";
 import { CommunicationView } from "./features/communication";
 import { QuickLogSheet } from "./features/quick-log";
-import { CoachInbox } from "./features/coach-inbox";
 import { CoachModal } from "./features/coach";
 
 
@@ -291,8 +290,9 @@ export function App() {
               <section className="bento" aria-label="Atlas dashboard">
                 <RightNowHero
                   dashboard={dashboard}
-                  onOpen={() => setActiveModal("chief")}
+                  onOpen={() => setCoachOpen(true)}
                   onQuickLog={() => setIsQuickLogOpen(true)}
+                  onChanged={refreshDashboard}
                 />
                 <LifePulse dashboard={dashboard} onOpen={() => setActiveModal("pulse")} />
                 <MissionCenter dashboard={dashboard} onOpen={() => setActiveModal("missions")} />
@@ -303,7 +303,6 @@ export function App() {
                   onOpen={() => setActiveModal("calendar")}
                 />
                 <NewsTile />
-                <CoachInbox onChanged={refreshDashboard} onOpen={() => setCoachOpen(true)} />
               </section>
             </>
           ) : (
@@ -382,7 +381,12 @@ export function App() {
       ) : null}
 
       {coachOpen ? (
-        <CoachModal modules={modules} onClose={() => setCoachOpen(false)} onChanged={refreshDashboard} />
+        <CoachModal
+          modules={modules}
+          recommendations={dashboard?.recommendations ?? []}
+          onClose={() => setCoachOpen(false)}
+          onChanged={refreshDashboard}
+        />
       ) : null}
     </div>
   );

@@ -5,6 +5,7 @@ import { Chip, Modal, Panel, ProgressBar } from "../shared/ui";
 import { accentColorVar, accentForSlug, disciplineLabel, formatActivityTime, formatDateKey, moduleStatusLabel, moduleTypeLabel, severityAccent, severityLabel, slugify, summaryNumber } from "../shared/format";
 import { DayQuickAdd, EditableActivityRow } from "./journal";
 import { ModuleEditCard, moduleTypes } from "./modules";
+import { CoachInbox } from "./coach-inbox";
 
 // Dashboard cockpit: the panels (Welcome/LifePulse/Mission/Timeline/Calendar/
 // Chief/RightNowHero) and their expand modals. Extracted from App.tsx.
@@ -353,11 +354,13 @@ export function ChiefOfStaff({ dashboard, onOpen }: { dashboard: DashboardRespon
 export function RightNowHero({
   dashboard,
   onOpen,
-  onQuickLog
+  onQuickLog,
+  onChanged
 }: {
   dashboard: DashboardResponse | null;
   onOpen: () => void;
   onQuickLog: () => void;
+  onChanged?: () => void;
 }) {
   const recommendation = dashboard?.recommendations[0];
   const signals = dashboard?.real_signals;
@@ -368,7 +371,7 @@ export function RightNowHero({
       role="button"
       tabIndex={0}
       aria-haspopup="dialog"
-      aria-label="מה הכי נכון עכשיו — הצג המלצות"
+      aria-label="Chief of Staff — פתח מרכז פיקוד"
       onClick={onOpen}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -386,37 +389,45 @@ export function RightNowHero({
           {recommendation ? <Chip accent={severityAccent(recommendation.severity)}>{severityLabel(recommendation.severity)}</Chip> : null}
         </header>
 
-        <div className="hero-body">
-          <h2 dir="auto">{recommendation ? recommendation.title : "רשום פעולה אחת אמיתית כדי לתת ל־Atlas signal"}</h2>
-          <p dir="auto">
-            {recommendation
-              ? recommendation.body
-              : "Atlas ימליץ על הצעד הבא מתוך פעילות אמיתית ואיזון בין התחומים."}
-          </p>
-        </div>
+        <div className="hero-top">
+          <div className="hero-main">
+            <div className="hero-body">
+              <h2 dir="auto">{recommendation ? recommendation.title : "רשום פעולה אחת אמיתית כדי לתת ל־Atlas signal"}</h2>
+              <p dir="auto">
+                {recommendation
+                  ? recommendation.body
+                  : "Atlas ימליץ על הצעד הבא מתוך פעילות אמיתית ואיזון בין התחומים."}
+              </p>
+            </div>
 
-        <div className="hero-actions">
-          <button
-            className="btn-primary"
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onQuickLog();
-            }}
-          >
-            <Plus size={18} strokeWidth={2.6} />
-            רישום מהיר
-          </button>
-          <button
-            className="btn-ghost"
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpen();
-            }}
-          >
-            כל ההמלצות
-          </button>
+            <div className="hero-actions">
+              <button
+                className="btn-primary"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onQuickLog();
+                }}
+              >
+                <Plus size={18} strokeWidth={2.6} />
+                רישום מהיר
+              </button>
+              <button
+                className="btn-ghost"
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpen();
+                }}
+              >
+                מרכז הפיקוד
+              </button>
+            </div>
+          </div>
+
+          <aside className="hero-aside" aria-label="מאמן — תוכנית והצעות">
+            <CoachInbox variant="aside" onChanged={onChanged} />
+          </aside>
         </div>
 
         <div className="hero-stats">
@@ -447,7 +458,7 @@ export function RightNowHero({
 }
 
 
-export type CockpitModalKind = "today" | "pulse" | "missions" | "chief" | "calendar";
+export type CockpitModalKind = "today" | "pulse" | "missions" | "calendar";
 
 export function MissionCenterModal({
   modules,
@@ -857,29 +868,6 @@ export function CockpitModal({
         onModuleStatus={onModuleStatus}
         onClose={onClose}
       />
-    );
-  }
-
-  if (kind === "chief") {
-    const recommendations = dashboard?.recommendations ?? [];
-    return (
-      <Modal eyebrow="Recommendations" title="Chief of Staff" onClose={onClose}>
-        {recommendations.length ? (
-          <div className="detail-list">
-            {recommendations.map((recommendation, index) => (
-              <article className="mission-card" key={`${recommendation.title}-${index}`}>
-                <div className="mission-topline">
-                  <strong dir="auto">{recommendation.title}</strong>
-                  <Chip accent={severityAccent(recommendation.severity)}>{recommendation.severity}</Chip>
-                </div>
-                <p className="modal-lead" dir="auto">{recommendation.body}</p>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <p className="behavior-empty">אין המלצות חיות עדיין.</p>
-        )}
-      </Modal>
     );
   }
 

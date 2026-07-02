@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
 
 import {
+  type Accent,
   ApiError,
+  type DashboardRecommendation,
   type Goal,
   type GoalPlan,
   type LifeModule,
@@ -24,12 +26,18 @@ function stepAccent(status: string) {
   return status === "done" ? "green" : status === "in_progress" ? "blue" : "neutral";
 }
 
+function severityAccent(severity: string): Accent {
+  return severity === "critical" ? "red" : severity === "warning" ? "orange" : "green";
+}
+
 export function CoachModal({
   modules,
+  recommendations = [],
   onClose,
   onChanged
 }: {
   modules: LifeModule[];
+  recommendations?: DashboardRecommendation[];
   onClose: () => void;
   onChanged?: () => void;
 }) {
@@ -176,8 +184,27 @@ export function CoachModal({
   const hasActivePlan = Boolean(plan && plan.plan.status === "active");
 
   return (
-    <Modal eyebrow="Coach" title="מטרות ותוכניות" onClose={onClose}>
+    <Modal eyebrow="Chief of Staff" title="מרכז הפיקוד" onClose={onClose}>
       <div className="coach-modal">
+        <section className="coach-modal-section">
+          <h3>המלצות עכשיו</h3>
+          {recommendations.length ? (
+            <div className="coach-reco-list">
+              {recommendations.map((reco, index) => (
+                <article className="coach-reco" key={`${reco.title}-${index}`}>
+                  <div className="coach-reco-head">
+                    <strong dir="auto">{reco.title}</strong>
+                    <Chip accent={severityAccent(reco.severity)}>{reco.severity}</Chip>
+                  </div>
+                  {reco.body ? <p dir="auto">{reco.body}</p> : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="empty-panel-copy">אין המלצות חיות עדיין.</p>
+          )}
+        </section>
+
         <section className="coach-modal-section">
           <h3>הצעות ממתינות</h3>
           {proposals.length ? (
