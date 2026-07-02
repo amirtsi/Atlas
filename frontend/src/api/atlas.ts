@@ -367,8 +367,34 @@ export function createCommunicationProvider(): Promise<CommunicationProvider> {
   });
 }
 
-export function getCommunicationMessages(): Promise<CommunicationMessage[]> {
-  return request<CommunicationMessage[]>("/communication/messages?limit=100");
+export function getCommunicationMessages(scope: "all" | "dialogue" = "dialogue"): Promise<CommunicationMessage[]> {
+  return request<CommunicationMessage[]>(`/communication/messages?limit=100&scope=${scope}`);
+}
+
+export type WhatsAppStatus = {
+  configured: boolean;
+  bridge: "up" | "down" | "unconfigured";
+  session: string | null;
+  owner: string | null;
+  dry_run?: boolean;
+  detail: string | null;
+  provider_id?: string;
+};
+
+export function getWhatsAppStatus(): Promise<WhatsAppStatus> {
+  return request<WhatsAppStatus>("/communication/whatsapp/status");
+}
+
+export type WhatsAppQr = { qr_base64: string | null; pairing_code: string | null; error: string | null };
+
+export function requestWhatsAppQr(): Promise<WhatsAppQr> {
+  return request<WhatsAppQr>("/communication/whatsapp/qr", { method: "POST" });
+}
+
+export type DailyBriefSchedule = { enabled: boolean; time: string; timezone: string; next_run: string | null };
+
+export function getDailyBriefSchedule(): Promise<DailyBriefSchedule> {
+  return request<DailyBriefSchedule>("/communication/daily-brief/schedule");
 }
 
 export function sendCommunicationMessage(providerId: string, recipient: string, contentText: string): Promise<CommunicationMessage> {

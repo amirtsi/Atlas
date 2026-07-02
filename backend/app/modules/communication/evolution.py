@@ -53,6 +53,57 @@ def send_text_message(provider: dict, *, recipient: str, text: str) -> dict[str,
     return {"status": "sent", "provider_message_id": provider_message_id, "response": body}
 
 
+def _provider_credentials(provider: dict) -> tuple[str, str, str] | None:
+    config = provider.get("config") or {}
+    base_url = str(config.get("base_url") or "").rstrip("/")
+    instance = str(config.get("instance") or "")
+    api_key = str(config.get("api_key") or "")
+    if not base_url or not instance or not api_key:
+        return None
+    return base_url, instance, api_key
+
+
+def get_connection_state(provider: dict) -> dict[str, Any]:
+    """Bridge + session health for the WhatsApp hub. Never returns the api key.
+
+    bridge:  up | down | unconfigured   (is Evolution reachable at all?)
+    session: open | close | connecting | None   (is the WhatsApp pairing alive?)
+    """
+    creds = _provider_credentials(provider)
+    if creds is None:
+        return {"bridge": "unconfigured", "session": None, "detail": "Provider is missing base_url, instance or api_key."}
+    base_url, instance, api_key = creds
+    request = Request(f"{base_url}/instance/connectionState/{instance}", headers={"apikey": api_key})
+    try:
+        with urlopen(request, timeout=6) as response:
+            body = json.loads(response.read().decode("utf-8") or "{}")
+    except HTTPError as error:
+        return {"bridge": "up", "session": None, "detail": f"Evolution returned HTTP {error.code}."}
+    except (URLError, TimeoutError) as error:
+        return {"bridge": "down", "session": None, "detail": str(error)}
+    return {"bridge": "up", "session": (body.get("instance") or {}).get("state"), "detail": None}
+
+
+def request_pairing_qr(provider: dict) -> dict[str, Any]:
+    """Ask Evolution for a fresh pairing QR for the instance (base64 data URL)."""
+    creds = _provider_credentials(provider)
+    if creds is None:
+        return {"qr_base64": None, "pairing_code": None, "error": "Provider is missing base_url, instance or api_key."}
+    base_url, instance, api_key = creds
+    request = Request(f"{base_url}/instance/connect/{instance}", headers={"apikey": api_key})
+    try:
+        with urlopen(request, timeout=10) as response:
+            body = json.loads(response.read().decode("utf-8") or "{}")
+    except HTTPError as error:
+        return {"qr_base64": None, "pairing_code": None, "error": f"Evolution returned HTTP {error.code}."}
+    except (URLError, TimeoutError) as error:
+        return {"qr_base64": None, "pairing_code": None, "error": str(error)}
+    qr = str(body.get("base64") or "")
+    if qr and not qr.startswith("data:image"):
+        qr = f"data:image/png;base64,{qr}"
+    return {"qr_base64": qr or None, "pairing_code": body.get("pairingCode"), "error": None}
+
+
 def normalize_webhook_payload(payload: dict[str, Any]) -> dict[str, Any]:
     event_type = str(payload.get("event") or payload.get("type") or "unknown")
     data = payload.get("data") if isinstance(payload.get("data"), dict) else payload

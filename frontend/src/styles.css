@@ -2293,6 +2293,123 @@ button,
   gap: var(--sp-2);
 }
 
+/* ---- WhatsApp hub ------------------------------------------------ */
+
+.wa-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.46fr) minmax(0, 1fr);
+  gap: var(--sp-4);
+  align-items: start;
+  margin-bottom: var(--sp-4);
+}
+
+.wa-card {
+  display: grid;
+  gap: var(--sp-3);
+  height: auto;
+}
+
+.wa-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  background: var(--surface-1);
+}
+
+.wa-state-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--r-pill);
+  background: var(--text-muted);
+}
+
+.wa-state-green .wa-state-dot { background: #34d399; }
+.wa-state-orange .wa-state-dot { background: #fbbf24; }
+.wa-state-red .wa-state-dot { background: #f87171; }
+
+.wa-explain {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-md);
+  line-height: 1.6;
+}
+
+.wa-explain small,
+.wa-explain code {
+  display: inline-block;
+  margin-top: var(--sp-2);
+  padding: 2px 8px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  font-size: var(--fs-xs);
+}
+
+.wa-connect {
+  display: grid;
+  gap: var(--sp-3);
+  justify-items: start;
+}
+
+.wa-qr {
+  width: min(260px, 100%);
+  border-radius: var(--r-md);
+  border: 1px solid var(--border-strong);
+  background: #fff;
+  padding: var(--sp-2);
+}
+
+.wa-how {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-4);
+}
+
+.wa-how h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-primary);
+}
+
+.wa-how h3 svg {
+  color: var(--accent);
+}
+
+.wa-how ul {
+  margin: 0;
+  padding-inline-start: var(--sp-4);
+  display: grid;
+  gap: var(--sp-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.wa-conversation-title {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wa-error {
+  color: #fbbf24;
+}
+
+@media (max-width: 900px) {
+  .wa-grid,
+  .wa-how {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---- Modules management ----------------------------------------- */
 
 .modules-layout {

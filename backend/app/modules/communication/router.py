@@ -7,8 +7,10 @@ from app.modules.activity_ledger.service import insert_activity
 from app.modules.coach.service import answer_question
 from app.modules.communication.classifier import classify_message
 from app.modules.communication.evolution import (
+    get_connection_state,
     normalize_webhook_payload,
     normalize_whatsapp_number,
+    request_pairing_qr,
     send_text_message,
 )
 from app.modules.communication.intent import classify_intent
@@ -43,6 +45,43 @@ def _provider_config_with_defaults(config: dict) -> dict:
         next_config["default_recipient"] = get_settings().default_whatsapp_recipient
     next_config["default_recipient"] = normalize_whatsapp_number(str(next_config["default_recipient"]))
     return next_config
+
+
+def _active_evolution_provider(conn) -> dict | None:
+    row = conn.execute(
+        "SELECT * FROM communication_providers WHERE type = 'evolution' AND is_active = 1 "
+        "ORDER BY created_at DESC LIMIT 1"
+    ).fetchone()
+    return rows_to_dicts([row])[0] if row else None
+
+
+@router.get("/whatsapp/status")
+def whatsapp_status() -> dict:
+    """Plain-language health for the WhatsApp hub: is the bridge (Evolution) up,
+    and is the phone session paired? Never exposes the api key."""
+    with db_connection() as conn:
+        provider = _active_evolution_provider(conn)
+    if provider is None:
+        return {"configured": False, "bridge": "unconfigured", "session": None, "owner": None, "detail": "No active WhatsApp provider."}
+    config = provider.get("config") or {}
+    state = get_connection_state(provider)
+    return {
+        "configured": True,
+        "provider_id": provider["id"],
+        "owner": config.get("default_recipient"),
+        "dry_run": bool(config.get("dry_run", True)),
+        **state,
+    }
+
+
+@router.post("/whatsapp/qr")
+def whatsapp_qr() -> dict:
+    """Fresh pairing QR so the owner can re-link WhatsApp from inside Atlas."""
+    with db_connection() as conn:
+        provider = _active_evolution_provider(conn)
+    if provider is None:
+        raise HTTPException(status_code=404, detail="No active WhatsApp provider")
+    return request_pairing_qr(provider)
 
 
 @router.get("/providers", response_model=list[CommunicationProviderOut])
@@ -109,7 +148,11 @@ def update_provider(provider_id: str, payload: CommunicationProviderUpdate) -> d
 
 
 @router.get("/messages", response_model=list[CommunicationMessageOut])
-def list_messages(provider_id: str | None = None, limit: int = 100, offset: int = 0) -> list[dict]:
+def list_messages(provider_id: str | None = None, limit: int = 100, offset: int = 0, scope: str = "all") -> list[dict]:
+    """scope='dialogue' keeps only the Atlas ↔ owner conversation — messages the
+    owner sent Atlas and messages Atlas sent the owner. Everything else the
+    webhook stored (the owner's unrelated WhatsApp traffic) stays in the DB for
+    audit but is filtered out of the hub. scope='all' returns everything."""
     where: list[str] = []
     params: list[object] = []
     if provider_id:
@@ -118,10 +161,24 @@ def list_messages(provider_id: str | None = None, limit: int = 100, offset: int 
     sql = "SELECT * FROM communication_messages"
     if where:
         sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
-    params.extend([limit, offset])
+    sql += " ORDER BY created_at DESC"
     with db_connection() as conn:
-        return rows_to_dicts(conn.execute(sql, params).fetchall())
+        if scope != "dialogue":
+            rows = rows_to_dicts(conn.execute(sql + " LIMIT ? OFFSET ?", [*params, limit, offset]).fetchall())
+            return rows
+        provider = _active_evolution_provider(conn)
+        owner_raw = ((provider or {}).get("config") or {}).get("default_recipient") or ""
+        owner = normalize_whatsapp_number(str(owner_raw))
+        rows = rows_to_dicts(conn.execute(sql + " LIMIT 500", params).fetchall())
+
+    def in_dialogue(message: dict) -> bool:
+        if not owner:
+            return message.get("direction") == "outbound"
+        sender = normalize_whatsapp_number(str(message.get("sender") or ""))
+        recipient = normalize_whatsapp_number(str(message.get("recipient") or ""))
+        return sender == owner or recipient == owner
+
+    return [m for m in rows if in_dialogue(m)][offset : offset + limit]
 
 
 @router.post("/messages", status_code=201, response_model=CommunicationMessageOut)
