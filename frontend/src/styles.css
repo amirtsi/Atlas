@@ -3911,6 +3911,29 @@ button,
   color: var(--accent);
 }
 
+.tour-tooltip-centered {
+  align-items: center;
+  text-align: center;
+}
+
+.tour-tooltip-centered .tour-tooltip-head,
+.tour-tooltip-centered .tour-foot {
+  width: 100%;
+}
+
+.tour-hero-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin: var(--sp-1) auto 0;
+  border-radius: var(--r-pill);
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+}
+
 .tour-tooltip h3 {
   margin: 0;
   font-size: var(--fs-lg);
