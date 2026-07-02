@@ -3622,6 +3622,163 @@ button,
   }
 }
 
+/* =====================================================================
+   Command Center (unified Chief of Staff modal) — master/detail
+   ===================================================================== */
+.modal-sheet-wide {
+  width: min(1040px, 100%);
+}
+
+.command-center {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.cc-signals {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+}
+
+.cc-work {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr);
+  gap: var(--sp-3);
+  align-items: start;
+}
+
+.cc-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+  padding: var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+}
+
+.cc-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.cc-card-head h3 {
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cc-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-plan-goal {
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-weight: var(--fw-semibold);
+}
+
+.cc-plan-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.cc-plan-overall {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.cc-plan-pct-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.cc-plan-pct-big {
+  font-size: 30px;
+  font-weight: var(--fw-bold);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-drift {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-2);
+}
+
+.cc-drift-cell {
+  display: grid;
+  gap: 2px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.cc-drift-cell span {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+}
+
+.cc-drift-cell strong {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-plan-actions {
+  margin-top: var(--sp-1);
+  display: flex;
+  gap: var(--sp-2);
+}
+
+/* Goal-create form inside the narrower goals column: title full, module+date
+   row, button full — prevents the 4-across form from overflowing the column. */
+.cc-goals .coach-goal-form {
+  grid-template-columns: 1fr 1fr;
+}
+
+.cc-goals .coach-goal-form input:first-child,
+.cc-goals .coach-goal-form button {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 860px) {
+  .cc-signals,
+  .cc-work {
+    grid-template-columns: 1fr;
+  }
+  .cc-goals .coach-goal-form {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Respect users who prefer reduced motion (accessibility) */
 @media (prefers-reduced-motion: reduce) {
   *,

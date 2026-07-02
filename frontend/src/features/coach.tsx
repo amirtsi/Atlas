@@ -183,106 +183,144 @@ export function CoachModal({
   const nextStep = plan ? pickNextStep(plan.steps) : null;
   const hasActivePlan = Boolean(plan && plan.plan.status === "active");
 
+  const selectedGoal = goals.find((g) => g.id === selectedId) ?? null;
+
   return (
-    <Modal eyebrow="Chief of Staff" title="מרכז הפיקוד" onClose={onClose}>
-      <div className="coach-modal">
-        <section className="coach-modal-section">
-          <h3>המלצות עכשיו</h3>
-          {recommendations.length ? (
-            <div className="coach-reco-list">
-              {recommendations.map((reco, index) => (
-                <article className="coach-reco" key={`${reco.title}-${index}`}>
-                  <div className="coach-reco-head">
-                    <strong dir="auto">{reco.title}</strong>
-                    <Chip accent={severityAccent(reco.severity)}>{reco.severity}</Chip>
-                  </div>
-                  {reco.body ? <p dir="auto">{reco.body}</p> : null}
-                </article>
-              ))}
-            </div>
-          ) : (
-            <p className="empty-panel-copy">אין המלצות חיות עדיין.</p>
-          )}
-        </section>
+    <Modal eyebrow="Chief of Staff" title="מרכז הפיקוד" size="wide" onClose={onClose}>
+      <div className="command-center">
+        {note ? <p className="coach-modal-note" dir="auto">{note}</p> : null}
 
-        <section className="coach-modal-section">
-          <h3>הצעות ממתינות</h3>
-          {proposals.length ? (
-            <div className="coach-inbox-list">
-              {proposals.map((proposal) => (
-                <article className="coach-proposal" key={proposal.id}>
-                  <div className="coach-proposal-body">
-                    <strong dir="auto">{proposal.title}</strong>
-                    {proposal.rationale ? <p dir="auto">{proposal.rationale}</p> : null}
-                  </div>
-                  <div className="coach-proposal-actions">
-                    <button className="icon-button small" type="button" aria-label="אשר" disabled={busy} onClick={() => resolveProposal(proposal.id, "accept")}>
-                      <Check size={15} />
-                    </button>
-                    <button className="icon-button small" type="button" aria-label="דחה" disabled={busy} onClick={() => resolveProposal(proposal.id, "dismiss")}>
-                      <X size={15} />
-                    </button>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <p className="empty-panel-copy">אין הצעות ממתינות.</p>
-          )}
-        </section>
+        <div className="cc-signals">
+          <section className="cc-card">
+            <header className="cc-card-head">
+              <h3>המלצות עכשיו</h3>
+              <span className="cc-count">{recommendations.length}</span>
+            </header>
+            {recommendations.length ? (
+              <div className="coach-reco-list">
+                {recommendations.map((reco, index) => (
+                  <article className="coach-reco" key={`${reco.title}-${index}`}>
+                    <div className="coach-reco-head">
+                      <strong dir="auto">{reco.title}</strong>
+                      <Chip accent={severityAccent(reco.severity)}>{reco.severity}</Chip>
+                    </div>
+                    {reco.body ? <p dir="auto">{reco.body}</p> : null}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="empty-panel-copy">אין המלצות חיות עדיין.</p>
+            )}
+          </section>
 
-        <section className="coach-modal-section">
-          <h3>מטרות</h3>
-          <div className="coach-goal-list">
-            {goals.map((goal) => (
-              <button
-                key={goal.id}
-                type="button"
-                className={`coach-goal-row ${selectedId === goal.id ? "active" : ""}`}
-                onClick={() => setSelectedId(goal.id)}
-              >
-                <span dir="auto">{goal.title}</span>
-                {goal.status ? <Chip accent="neutral">{goal.status}</Chip> : null}
+          <section className="cc-card">
+            <header className="cc-card-head">
+              <h3>הצעות ממתינות</h3>
+              <span className="cc-count">{proposals.length}</span>
+            </header>
+            {proposals.length ? (
+              <div className="coach-inbox-list">
+                {proposals.map((proposal) => (
+                  <article className="coach-proposal" key={proposal.id}>
+                    <div className="coach-proposal-body">
+                      <strong dir="auto">{proposal.title}</strong>
+                      {proposal.rationale ? <p dir="auto">{proposal.rationale}</p> : null}
+                    </div>
+                    <div className="coach-proposal-actions">
+                      <button className="icon-button small" type="button" aria-label="אשר" disabled={busy} onClick={() => resolveProposal(proposal.id, "accept")}>
+                        <Check size={15} />
+                      </button>
+                      <button className="icon-button small" type="button" aria-label="דחה" disabled={busy} onClick={() => resolveProposal(proposal.id, "dismiss")}>
+                        <X size={15} />
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="empty-panel-copy">אין הצעות ממתינות.</p>
+            )}
+          </section>
+        </div>
+
+        <div className="cc-work">
+          <section className="cc-card cc-goals">
+            <header className="cc-card-head">
+              <h3>מטרות</h3>
+              <span className="cc-count">{goals.length}</span>
+            </header>
+            <div className="coach-goal-list">
+              {goals.map((goal) => (
+                <button
+                  key={goal.id}
+                  type="button"
+                  className={`coach-goal-row ${selectedId === goal.id ? "active" : ""}`}
+                  onClick={() => setSelectedId(goal.id)}
+                >
+                  <span dir="auto">{goal.title}</span>
+                  {goal.status ? <Chip accent={goal.status === "active" ? "green" : "neutral"}>{goal.status}</Chip> : null}
+                </button>
+              ))}
+              {goals.length === 0 ? <p className="empty-panel-copy">עדיין אין מטרות.</p> : null}
+            </div>
+
+            <form className="coach-goal-form" onSubmit={submitGoal}>
+              <input dir="auto" placeholder="מטרה חדשה…" value={title} onChange={(e) => setTitle(e.target.value)} />
+              <select value={moduleId} onChange={(e) => setModuleId(e.target.value)}>
+                <option value="">ללא Module</option>
+                {modules.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+              <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
+              <button className="btn-primary" type="submit" disabled={busy || !title.trim()}>
+                + מטרה
               </button>
-            ))}
-            {goals.length === 0 ? <p className="empty-panel-copy">עדיין אין מטרות.</p> : null}
-          </div>
+            </form>
+          </section>
 
-          <form className="coach-goal-form" onSubmit={submitGoal}>
-            <input dir="auto" placeholder="מטרה חדשה…" value={title} onChange={(e) => setTitle(e.target.value)} />
-            <select value={moduleId} onChange={(e) => setModuleId(e.target.value)}>
-              <option value="">ללא Module</option>
-              {modules.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-            <input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} />
-            <button className="btn-primary" type="submit" disabled={busy || !title.trim()}>
-              + מטרה
-            </button>
-          </form>
-        </section>
+          <section className="cc-card cc-plan">
+            <header className="cc-card-head">
+              <h3>תוכנית</h3>
+              {selectedGoal ? <span className="cc-plan-goal" dir="auto">{selectedGoal.title}</span> : null}
+            </header>
 
-        {selectedId ? (
-          <section className="coach-modal-section">
-            <h3>תוכנית</h3>
-            {plan ? (
-              <>
-                <div className="coach-plan-topline">
-                  <strong dir="auto">{plan.goal.title}</strong>
-                  <span className="coach-plan-pct">{plan.overall_percent}%</span>
-                  {chip ? <Chip accent={chip.accent}>{chip.label}</Chip> : null}
+            {!selectedId ? (
+              <p className="empty-panel-copy">בחר מטרה כדי לראות את התוכנית.</p>
+            ) : plan ? (
+              <div className="cc-plan-body">
+                <div className="cc-plan-overall">
+                  <div className="cc-plan-pct-row">
+                    <span className="cc-plan-pct-big">{plan.overall_percent}%</span>
+                    {chip ? <Chip accent={chip.accent}>{chip.label}</Chip> : null}
+                  </div>
+                  <ProgressBar value={plan.overall_percent} accent={chip?.accent ?? "blue"} />
+                  {nextStep ? (
+                    <p className="coach-plan-next" dir="auto">
+                      הצעד הבא: {nextStep.title}
+                    </p>
+                  ) : null}
                 </div>
-                <ProgressBar value={plan.overall_percent} accent={chip?.accent ?? "blue"} />
+
                 {plan.drift ? (
-                  <p className="coach-plan-drift">
-                    expected {Math.round(plan.drift.expected_percent * 100)}% · actual {Math.round(plan.drift.actual_percent * 100)}%
-                    {plan.drift.projected_completion ? ` · projected ${plan.drift.projected_completion.slice(0, 10)}` : ""}
-                  </p>
+                  <div className="cc-drift">
+                    <div className="cc-drift-cell">
+                      <span>צפוי</span>
+                      <strong>{Math.round(plan.drift.expected_percent * 100)}%</strong>
+                    </div>
+                    <div className="cc-drift-cell">
+                      <span>בפועל</span>
+                      <strong>{Math.round(plan.drift.actual_percent * 100)}%</strong>
+                    </div>
+                    <div className="cc-drift-cell">
+                      <span>סיום צפוי</span>
+                      <strong>{plan.drift.projected_completion ? plan.drift.projected_completion.slice(0, 10) : "—"}</strong>
+                    </div>
+                  </div>
                 ) : null}
-                {nextStep ? <p className="coach-plan-next" dir="auto">next: {nextStep.title}</p> : null}
+
                 <div className="coach-step-list">
                   {plan.steps.map((step) => (
                     <div className="coach-step" key={step.id}>
@@ -297,30 +335,30 @@ export function CoachModal({
                     </div>
                   ))}
                 </div>
-              </>
+              </div>
             ) : planMissing ? (
               <p className="empty-panel-copy">אין עדיין תוכנית למטרה זו.</p>
             ) : (
               <p className="empty-panel-copy">טוען…</p>
             )}
 
-            <div className="coach-plan-actions">
-              {planMissing ? (
-                <button className="btn-primary" type="button" disabled={busy} onClick={doPropose}>
-                  הצע תוכנית
-                </button>
-              ) : hasActivePlan ? (
-                <button className="btn-ghost" type="button" disabled={busy} onClick={doReplan}>
-                  תכנן מחדש
-                </button>
-              ) : plan ? (
-                <p className="empty-panel-copy">התוכנית ממתינה לאישור ב-Inbox.</p>
-              ) : null}
-            </div>
+            {selectedId ? (
+              <div className="cc-plan-actions">
+                {planMissing ? (
+                  <button className="btn-primary" type="button" disabled={busy} onClick={doPropose}>
+                    הצע תוכנית
+                  </button>
+                ) : hasActivePlan ? (
+                  <button className="btn-ghost" type="button" disabled={busy} onClick={doReplan}>
+                    תכנן מחדש
+                  </button>
+                ) : plan ? (
+                  <p className="empty-panel-copy">התוכנית ממתינה לאישור ב-Inbox.</p>
+                ) : null}
+              </div>
+            ) : null}
           </section>
-        ) : null}
-
-        {note ? <p className="coach-modal-note" dir="auto">{note}</p> : null}
+        </div>
       </div>
     </Modal>
   );
