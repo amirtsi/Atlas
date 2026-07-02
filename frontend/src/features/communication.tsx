@@ -161,6 +161,7 @@ export function CommunicationView({
       </div>
 
       <div className="wa-grid">
+        <div className="wa-col">
         <section className="panel">
           <div className="panel-content wa-card">
             <header className="panel-header">
@@ -270,39 +271,6 @@ export function CommunicationView({
           <div className="panel-content wa-card">
             <header className="panel-header">
               <div>
-                <span className="panel-eyebrow">איך זה עובד</span>
-                <h2>Atlas ↔ WhatsApp</h2>
-              </div>
-            </header>
-            <div className="wa-how">
-              <div>
-                <h3>
-                  <ArrowUpFromLine size={14} /> אתה כותב ל-Atlas
-                </h3>
-                <ul>
-                  <li>"רצתי 30 דקות" → נרשמת פעילות אמיתית ביומן</li>
-                  <li>שאלה ("מה הסטטוס שלי השבוע?") → המאמן עונה</li>
-                </ul>
-              </div>
-              <div>
-                <h3>
-                  <ArrowDownToLine size={14} /> Atlas כותב לך
-                </h3>
-                <ul>
-                  <li>☀️ תדרוך יומי {schedule?.enabled ? `ב-${schedule.time}` : ""} — ההמלצה, הנתונים והצעד הבא בתוכנית</li>
-                  <li>✅ אישור על כל פעילות שנקלטה מהודעה שלך</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <div className="wa-grid">
-        <section className="panel">
-          <div className="panel-content wa-card">
-            <header className="panel-header">
-              <div>
                 <span className="panel-eyebrow">בדיקה</span>
                 <h2>שלח הודעת בדיקה</h2>
               </div>
@@ -329,6 +297,39 @@ export function CommunicationView({
             )}
           </div>
         </section>
+        </div>
+
+        <div className="wa-col">
+        <section className="panel">
+          <div className="panel-content wa-card">
+            <header className="panel-header">
+              <div>
+                <span className="panel-eyebrow">איך זה עובד</span>
+                <h2>Atlas ↔ WhatsApp</h2>
+              </div>
+            </header>
+            <div className="wa-how">
+              <div>
+                <h3>
+                  <ArrowUpFromLine size={14} /> אתה כותב ל-Atlas
+                </h3>
+                <ul>
+                  <li>"רצתי 30 דקות" → נרשמת פעילות אמיתית ביומן</li>
+                  <li>שאלה ("מה הסטטוס שלי השבוע?") → המאמן עונה</li>
+                </ul>
+              </div>
+              <div>
+                <h3>
+                  <ArrowDownToLine size={14} /> Atlas כותב לך
+                </h3>
+                <ul>
+                  <li>☀️ תדרוך יומי {schedule?.enabled ? `ב-${schedule.time}` : ""} — ההמלצה, הנתונים והצעד הבא בתוכנית</li>
+                  <li>✅ אישור על כל פעילות שנקלטה מהודעה שלך</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
 
         <div className="ledger-list wa-conversation" aria-label="השיחה עם Atlas">
           <h3 className="wa-conversation-title">השיחה שלך עם Atlas</h3>
@@ -352,6 +353,7 @@ export function CommunicationView({
           ) : (
             <p className="empty-panel-copy">עדיין אין הודעות בינך ל-Atlas. שלח הודעת בדיקה או כתוב ל-Atlas ב-WhatsApp.</p>
           )}
+        </div>
         </div>
       </div>
     </section>

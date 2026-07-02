@@ -2326,6 +2326,15 @@ button,
   margin-bottom: var(--sp-4);
 }
 
+/* Each column stacks its cards independently, so a tall card in one column
+   never opens a hole under the shorter card in the other. */
+.wa-col {
+  display: grid;
+  gap: var(--sp-4);
+  align-content: start;
+  min-width: 0;
+}
+
 .wa-card {
   display: grid;
   gap: var(--sp-3);
