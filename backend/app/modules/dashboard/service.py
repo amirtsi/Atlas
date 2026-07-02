@@ -9,11 +9,18 @@ into another module's router.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from sqlite3 import Connection
 from zoneinfo import ZoneInfo
 
+from fastapi import HTTPException
+
 from app.core.config import get_settings
-from app.core.database import db_connection, rows_to_dicts
+from app.core.database import db_connection, new_id, rows_to_dicts
+from app.core.time import utc_now_iso
 from app.modules.life_modules.behavior import build_behavior
+from app.shared.audit import record_audit_event
+
+_SEVERITY_RANK = {"critical": 0, "warning": 1, "info": 2}
 
 
 def get_today_dashboard() -> dict:
@@ -104,8 +111,10 @@ def get_today_dashboard() -> dict:
                 (week_start,),
             ).fetchall()
         )
+        recommendations = build_recommendations(
+            conn, recent_activities, weekly_balance, active_modules, today_start, today_stats["activity_count"]
+        )
 
-    recommendations = _build_recommendations(recent_activities, weekly_balance, active_modules)
     return {
         "today_focus": {
             "question": "What is the best thing I should do right now?",
@@ -124,7 +133,7 @@ def get_today_dashboard() -> dict:
         "recent_activities": recent_activities,
         "active_modules": active_modules,
         "weekly_balance": weekly_balance,
-        "recommendations": recommendations[:1],
+        "recommendations": recommendations,
     }
 
 
@@ -136,104 +145,130 @@ def _summary_number(module: dict, key: str, default: int = 0) -> int:
         return default
 
 
-def _module_recommendation(active_modules: list[dict]) -> dict | None:
-    for module in active_modules:
-        if module["type"] != "habit":
-            continue
-        weekly_target = max(1, _summary_number(module, "weekly_target", 3))
-        weekly_completions = _summary_number(module, "weekly_completions")
-        if weekly_completions < weekly_target:
-            return {
-                "severity": "warning" if weekly_completions == 0 else "info",
-                "title": f"Complete {module['name']} once today",
-                "body": (
-                    f"{module['name']} is at {weekly_completions}/{weekly_target} this week. "
-                    "One completion will protect the weekly rhythm."
-                ),
-            }
-
-    for module in active_modules:
-        if module["type"] != "learning":
-            continue
-        study_minutes = _summary_number(module, "study_minutes")
-        units_done = _summary_number(module, "learning_units_done")
-        units_total = _summary_number(module, "learning_units_total")
-        if study_minutes < 45:
-            return {
-                "severity": "warning",
-                "title": f"Study {module['name']} for 45 minutes",
-                "body": (
-                    f"{module['name']} has {study_minutes} study minutes this week. "
-                    f"Current unit progress is {units_done}/{units_total}."
-                ),
-            }
-
-    for module in active_modules:
-        if module["type"] != "project":
-            continue
-        total_open = _summary_number(module, "total_open")
-        total_done = _summary_number(module, "total_done")
-        if total_open > 0:
-            return {
-                "severity": "info",
-                "title": f"Close one {module['name']} item",
-                "body": (
-                    f"{module['name']} has {total_open} open items and {total_done} completed. "
-                    "Pick one small task, bug, or feature and close it."
-                ),
-            }
-
-    return None
-
-
-def _build_recommendations(
-    recent_activities: list[dict], weekly_balance: list[dict], active_modules: list[dict]
+def build_recommendations(
+    conn: Connection,
+    recent_activities: list[dict],
+    weekly_balance: list[dict],
+    active_modules: list[dict],
+    today_start: str,
+    today_activity_count: int,
 ) -> list[dict]:
-    by_slug = {item["discipline_slug"]: item for item in weekly_balance}
-    learning_minutes = by_slug.get("learning", {}).get("duration_minutes", 0)
-    recovery_minutes = by_slug.get("recovery", {}).get("duration_minutes", 0)
-    work_minutes = by_slug.get("work", {}).get("duration_minutes", 0)
+    """Generalized, ranked, keyed recommendations derived from real signals across
+    the user's own modules/goals/disciplines. Recommendations whose key received
+    feedback today are snoozed (see _snoozed_keys)."""
+    from app.modules.planning.service import get_goal_plan
 
-    module_recommendation = _module_recommendation(active_modules)
-    if module_recommendation:
-        return [module_recommendation]
+    candidates: list[dict] = []
 
-    if learning_minutes == 0:
-        return [
-            {
-                "severity": "warning",
-                "title": "Study OSCP tonight",
-                "body": "No learning activity is logged this week. If you have 45 minutes, use it for OSCP.",
-            }
-        ]
-    if work_minutes > learning_minutes * 2 and learning_minutes < 180:
-        return [
-            {
-                "severity": "info",
-                "title": "Keep OSCP light but present",
-                "body": "Work is dominating the week. A short OSCP session keeps the learning thread alive.",
-            }
-        ]
-    if recovery_minutes == 0:
-        return [
-            {
-                "severity": "warning",
-                "title": "Protect recovery",
-                "body": "No recovery activity is logged this week. Do a short physiotherapy session.",
-            }
-        ]
-    if not recent_activities:
-        return [
-            {
-                "severity": "info",
-                "title": "Log one completed action",
-                "body": "Atlas needs one real signal from today before making stronger recommendations.",
-            }
-        ]
-    return [
-        {
-            "severity": "info",
-            "title": "Stay with the current mission",
-            "body": "Your week has signal. Choose the next small action instead of opening a new front.",
-        }
-    ]
+    def add(key: str, severity: str, title: str, body: str) -> None:
+        candidates.append({"key": key, "severity": severity, "title": title, "body": body, "_order": len(candidates)})
+
+    for module in active_modules:
+        if module["type"] == "habit":
+            target = max(1, _summary_number(module, "weekly_target", 3))
+            done = _summary_number(module, "weekly_completions")
+            if done < target:
+                add(
+                    f"habit_behind:{module['id']}",
+                    "warning" if done == 0 else "info",
+                    f"Complete {module['name']} once today",
+                    f"{module['name']} is at {done}/{target} this week. One completion protects the weekly rhythm.",
+                )
+        elif module["type"] == "learning":
+            minutes = _summary_number(module, "study_minutes")
+            if minutes < 45:
+                units_done = _summary_number(module, "learning_units_done")
+                units_total = _summary_number(module, "learning_units_total")
+                add(
+                    f"learning_light:{module['id']}",
+                    "warning",
+                    f"Study {module['name']} for 45 minutes",
+                    f"{module['name']} has {minutes} study minutes this week. Unit progress {units_done}/{units_total}.",
+                )
+        elif module["type"] == "project":
+            total_open = _summary_number(module, "total_open")
+            if total_open > 0:
+                total_done = _summary_number(module, "total_done")
+                add(
+                    f"project_open:{module['id']}",
+                    "info",
+                    f"Close one {module['name']} item",
+                    f"{module['name']} has {total_open} open and {total_done} done. Pick one small item and close it.",
+                )
+
+    active_goals = rows_to_dicts(
+        conn.execute("SELECT * FROM goals WHERE status = 'active' ORDER BY created_at DESC").fetchall()
+    )
+    for goal in active_goals:
+        plan = get_goal_plan(conn, goal["id"])
+        drift = plan.get("drift") if plan else None
+        if drift and drift.get("on_track") is False:
+            add(
+                f"goal_drift:{goal['id']}",
+                "warning",
+                f"{goal['title']} is behind schedule",
+                f"You're at {int(drift['actual_percent'] * 100)}% vs {int(drift['expected_percent'] * 100)}% "
+                "expected. Push the next step or re-plan.",
+            )
+
+    stale_cutoff = (datetime.now(UTC) - timedelta(days=14)).replace(microsecond=0).isoformat()
+    for module in active_modules:
+        fresh = conn.execute(
+            "SELECT 1 FROM activities WHERE module_id = ? AND occurred_at >= ? LIMIT 1",
+            (module["id"], stale_cutoff),
+        ).fetchone()
+        if not fresh:
+            add(
+                f"stale_module:{module['id']}",
+                "warning",
+                f"Re-engage {module['name']}",
+                f"No activity logged for {module['name']} in 14 days. A small session revives it.",
+            )
+
+    active_slugs = {module["discipline_slug"] for module in active_modules}
+    for balance in weekly_balance:
+        if balance["discipline_slug"] in active_slugs and (balance.get("duration_minutes") or 0) == 0:
+            add(
+                f"discipline_gap:{balance['discipline_slug']}",
+                "info",
+                f"Invest in {balance['discipline_name']} this week",
+                f"No time logged in {balance['discipline_name']} this week. A short session keeps it alive.",
+            )
+
+    if today_activity_count == 0:
+        add(
+            "log_nudge",
+            "info",
+            "Log one real action",
+            "Atlas needs one real signal from today before making stronger recommendations.",
+        )
+
+    snoozed = _snoozed_keys(conn, today_start)
+    visible = [c for c in candidates if c["key"] not in snoozed]
+    visible.sort(key=lambda c: (_SEVERITY_RANK.get(c["severity"], 9), c["_order"]))
+    return [{"key": c["key"], "severity": c["severity"], "title": c["title"], "body": c["body"]} for c in visible[:5]]
+
+
+def _snoozed_keys(conn: Connection, today_start: str) -> set[str]:
+    rows = conn.execute(
+        "SELECT DISTINCT rec_key FROM recommendation_feedback WHERE created_at >= ?", (today_start,)
+    ).fetchall()
+    return {row["rec_key"] for row in rows}
+
+
+def record_recommendation_feedback(conn: Connection, rec_key: str, action: str) -> dict:
+    if action not in {"dismissed", "helpful"}:
+        raise HTTPException(status_code=422, detail="action must be 'dismissed' or 'helpful'")
+    conn.execute(
+        "INSERT INTO recommendation_feedback (id, rec_key, action, created_at) VALUES (?, ?, ?, ?)",
+        (new_id(), rec_key, action, utc_now_iso()),
+    )
+    record_audit_event(
+        conn,
+        entity_type="recommendation",
+        entity_id=rec_key,
+        action=action,
+        summary=f"Recommendation {action}: {rec_key}",
+        changes={},
+    )
+    return {"rec_key": rec_key, "action": action}

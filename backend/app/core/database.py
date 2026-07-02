@@ -175,6 +175,15 @@ CREATE TABLE IF NOT EXISTS proposals (
 
 CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status);
 
+CREATE TABLE IF NOT EXISTS recommendation_feedback (
+  id TEXT PRIMARY KEY,
+  rec_key TEXT NOT NULL,
+  action TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_rec_feedback_key ON recommendation_feedback(rec_key);
+
 CREATE TABLE IF NOT EXISTS goals (
   id TEXT PRIMARY KEY,
   module_id TEXT REFERENCES life_modules(id),
