@@ -85,6 +85,29 @@ Finally open **Comms** in the Atlas UI → the WhatsApp hub shows the connection
 if it says "דורש סריקת QR", scan the QR right there from your phone
 (WhatsApp → Settings → Linked Devices). Moving hosts always requires one re-scan.
 
+## 5b. (Optional) Obsidian projection
+
+Atlas can mirror itself into an Obsidian vault: a daily note per day (activities,
+stats, brief) and a note per goal (plan checkboxes with real progress + drift),
+all inside an `Atlas/` folder it owns. Refreshes every 15 minutes + on
+`POST /api/v1/obsidian/export`.
+
+1. Sync your vault to the Pi with [Syncthing](https://syncthing.net) (install on the
+   Pi + your Mac/phone, share the vault folder both ways).
+2. Start the app stack with the Obsidian overlay:
+
+```bash
+ATLAS_OBSIDIAN_VAULT_DIR=/home/pi/ObsidianVault \
+docker compose -f docker-compose.yml -f docker-compose.obsidian.yml up -d --build
+```
+
+Notes appear under `Atlas/Daily/` and `Atlas/Goals/` in the vault and sync back to
+every device. Files carry `generated_by: atlas` frontmatter — they're derived views
+and get rewritten, so don't edit them (write your own notes anywhere else, including
+elsewhere in `Atlas/`; Atlas only ever prunes files it generated itself).
+
+On a Mac (no Docker): set `ATLAS_OBSIDIAN_VAULT=/path/to/vault` in `backend/.env`.
+
 ## 6. Updating
 
 ```bash

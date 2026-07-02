@@ -38,6 +38,11 @@ class Settings(BaseSettings):
     daily_brief_enabled: bool = True
     daily_brief_hour: int = 8
     daily_brief_minute: int = 0
+    # Obsidian projection. Path to the vault root (a Syncthing-synced copy on the
+    # Pi, or the local vault on a Mac). Empty => feature off. Atlas writes ONLY
+    # inside an `Atlas/` subfolder it owns; notes are derived full rewrites.
+    obsidian_vault: str = ""
+    obsidian_export_minutes: int = 15
 
     @property
     def resolved_database_path(self) -> Path:
