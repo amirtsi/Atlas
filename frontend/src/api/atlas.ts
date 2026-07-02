@@ -620,6 +620,7 @@ export type PlanStep = {
   kind: string;
   sequence: number;
   progress: PlanStepProgress;
+  linked_activity_ids: string[];
 };
 
 export type Drift = {
@@ -680,6 +681,19 @@ export function updateGoal(id: string, payload: GoalUpdatePayload): Promise<Goal
 
 export function deleteGoal(id: string): Promise<Goal> {
   return request<Goal>(`/planning/goals/${id}`, { method: "DELETE" });
+}
+
+export type StepLinks = { step_id: string; linked_activity_ids: string[] };
+
+export function linkActivityToStep(stepId: string, activityId: string): Promise<StepLinks> {
+  return request<StepLinks>(`/planning/steps/${stepId}/links`, {
+    method: "POST",
+    body: JSON.stringify({ activity_id: activityId })
+  });
+}
+
+export function unlinkActivityFromStep(stepId: string, activityId: string): Promise<StepLinks> {
+  return request<StepLinks>(`/planning/steps/${stepId}/links/${activityId}`, { method: "DELETE" });
 }
 
 export function proposePlan(goalId: string): Promise<Proposal> {

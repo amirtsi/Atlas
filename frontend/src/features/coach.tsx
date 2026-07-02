@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Pencil, Trash2, X } from "lucide-react";
+import { Check, Link2, Pencil, Plus, Trash2, X } from "lucide-react";
 
 import {
   type Accent,
@@ -7,6 +7,7 @@ import {
   type DashboardRecommendation,
   type Goal,
   type GoalPlan,
+  type JournalActivity,
   type LifeModule,
   type Proposal,
   type ReplanResult,
@@ -17,8 +18,10 @@ import {
   getGoalPlan,
   getGoals,
   getProposals,
+  linkActivityToStep,
   proposePlan,
   replanGoal,
+  unlinkActivityFromStep,
   updateGoal
 } from "../api/atlas";
 import { Chip, Modal, ProgressBar } from "../shared/ui";
@@ -34,11 +37,13 @@ function severityAccent(severity: string): Accent {
 
 export function CoachModal({
   modules,
+  activities = [],
   recommendations = [],
   onClose,
   onChanged
 }: {
   modules: LifeModule[];
+  activities?: JournalActivity[];
   recommendations?: DashboardRecommendation[];
   onClose: () => void;
   onChanged?: () => void;
@@ -62,13 +67,17 @@ export function CoachModal({
   const [editModuleId, setEditModuleId] = useState("");
   const [editTargetDate, setEditTargetDate] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [linkingStepId, setLinkingStepId] = useState<string | null>(null);
 
   async function loadLists() {
     const [nextProposals, nextGoals] = await Promise.all([getProposals("pending"), getGoals()]);
     setProposals(nextProposals);
     setGoals(nextGoals);
-    if (!selectedId && nextGoals.length) {
-      setSelectedId(nextGoals[0].id);
+    if (!selectedId) {
+      const firstVisible = nextGoals.find((g) => g.status !== "abandoned");
+      if (firstVisible) {
+        setSelectedId(firstVisible.id);
+      }
     }
   }
 
@@ -195,6 +204,33 @@ export function CoachModal({
     }
   }
 
+  async function doLink(stepId: string, activityId: string) {
+    setBusy(true);
+    setNote(null);
+    try {
+      await linkActivityToStep(stepId, activityId);
+      setLinkingStepId(null);
+      await refreshAll();
+    } catch {
+      setNote("לא הצלחתי לקשר את הפעילות.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doUnlink(stepId: string, activityId: string) {
+    setBusy(true);
+    setNote(null);
+    try {
+      await unlinkActivityFromStep(stepId, activityId);
+      await refreshAll();
+    } catch {
+      setNote("לא הצלחתי לבטל את הקישור.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function doPropose() {
     if (!selectedId) {
       return;
@@ -241,6 +277,7 @@ export function CoachModal({
 
   const selectedGoal = goals.find((g) => g.id === selectedId) ?? null;
   const visibleGoals = goals.filter((g) => g.status !== "abandoned");
+  const activityTitle = (id: string) => activities.find((a) => a.id === id)?.title ?? "פעילות";
 
   return (
     <Modal eyebrow="Chief of Staff" title="מרכז הפיקוד" size="wide" onClose={onClose}>
@@ -421,18 +458,60 @@ export function CoachModal({
                 ) : null}
 
                 <div className="coach-step-list">
-                  {plan.steps.map((step) => (
-                    <div className="coach-step" key={step.id}>
-                      <div className="coach-step-head">
-                        <span dir="auto">{step.title}</span>
-                        <Chip accent={stepAccent(step.progress.status)}>{step.progress.status}</Chip>
+                  {plan.steps.map((step) => {
+                    const unlinked = activities.filter((a) => !step.linked_activity_ids.includes(a.id));
+                    return (
+                      <div className="coach-step" key={step.id}>
+                        <div className="coach-step-head">
+                          <span dir="auto">{step.title}</span>
+                          <Chip accent={stepAccent(step.progress.status)}>{step.progress.status}</Chip>
+                        </div>
+                        <ProgressBar value={Math.round(step.progress.ratio * 100)} accent={stepAccent(step.progress.status)} />
+                        <div className="coach-step-foot">
+                          <span className="coach-step-meta">
+                            {step.progress.done}/{step.progress.target}
+                          </span>
+                          <button
+                            className="coach-link-toggle"
+                            type="button"
+                            disabled={busy}
+                            onClick={() => setLinkingStepId(linkingStepId === step.id ? null : step.id)}
+                          >
+                            <Link2 size={13} />
+                            קשר פעילות
+                          </button>
+                        </div>
+
+                        {step.linked_activity_ids.length ? (
+                          <div className="coach-link-chips">
+                            {step.linked_activity_ids.map((aid) => (
+                              <span className="coach-link-chip" key={aid}>
+                                <span dir="auto">{activityTitle(aid)}</span>
+                                <button type="button" aria-label="בטל קישור" disabled={busy} onClick={() => doUnlink(step.id, aid)}>
+                                  <X size={12} />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+
+                        {linkingStepId === step.id ? (
+                          <div className="coach-link-picker">
+                            {unlinked.length ? (
+                              unlinked.slice(0, 8).map((a) => (
+                                <button className="coach-link-option" type="button" key={a.id} disabled={busy} onClick={() => doLink(step.id, a.id)}>
+                                  <Plus size={12} />
+                                  <span dir="auto">{a.title}</span>
+                                </button>
+                              ))
+                            ) : (
+                              <span className="empty-panel-copy">אין פעילויות לקישור.</span>
+                            )}
+                          </div>
+                        ) : null}
                       </div>
-                      <ProgressBar value={Math.round(step.progress.ratio * 100)} accent={stepAccent(step.progress.status)} />
-                      <span className="coach-step-meta">
-                        {step.progress.done}/{step.progress.target}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ) : planMissing ? (

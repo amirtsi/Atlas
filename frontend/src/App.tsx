@@ -400,6 +400,7 @@ export function App() {
       {coachOpen ? (
         <CoachModal
           modules={modules}
+          activities={activities}
           recommendations={dashboard?.recommendations ?? []}
           onClose={() => setCoachOpen(false)}
           onChanged={refreshDashboard}
