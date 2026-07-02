@@ -2,12 +2,14 @@ from fastapi import APIRouter, HTTPException
 
 from app.core.database import db_connection, rows_to_dicts
 from app.modules.planning.service import (
+    abandon_goal,
     create_goal,
     generate_replan_proposal,
     get_goal_plan,
     propose_plan_for_goal,
+    update_goal,
 )
-from app.shared.schemas import GoalCreate, GoalOut, ProposalOut
+from app.shared.schemas import GoalCreate, GoalOut, GoalUpdate, ProposalOut
 
 router = APIRouter(prefix="/planning", tags=["planning"])
 
@@ -28,6 +30,18 @@ def list_goals(status: str | None = None) -> list[dict]:
     sql += " ORDER BY created_at DESC"
     with db_connection() as conn:
         return rows_to_dicts(conn.execute(sql, params).fetchall())
+
+
+@router.patch("/goals/{goal_id}", response_model=GoalOut)
+def edit_goal(goal_id: str, payload: GoalUpdate) -> dict:
+    with db_connection() as conn:
+        return update_goal(conn, goal_id, payload.model_dump(exclude_unset=True))
+
+
+@router.delete("/goals/{goal_id}", response_model=GoalOut)
+def delete_goal(goal_id: str) -> dict:
+    with db_connection() as conn:
+        return abandon_goal(conn, goal_id)
 
 
 @router.post("/goals/{goal_id}/propose-plan", response_model=ProposalOut)

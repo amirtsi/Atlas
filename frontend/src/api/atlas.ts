@@ -666,6 +666,22 @@ export function createGoal(payload: GoalCreatePayload): Promise<Goal> {
   return request<Goal>("/planning/goals", { method: "POST", body: JSON.stringify(payload) });
 }
 
+export type GoalUpdatePayload = {
+  title?: string;
+  module_id?: string;
+  target_date?: string;
+  capacity_minutes_per_week?: number;
+  definition_of_done?: string;
+};
+
+export function updateGoal(id: string, payload: GoalUpdatePayload): Promise<Goal> {
+  return request<Goal>(`/planning/goals/${id}`, { method: "PATCH", body: JSON.stringify(payload) });
+}
+
+export function deleteGoal(id: string): Promise<Goal> {
+  return request<Goal>(`/planning/goals/${id}`, { method: "DELETE" });
+}
+
 export function proposePlan(goalId: string): Promise<Proposal> {
   return request<Proposal>(`/planning/goals/${goalId}/propose-plan`, { method: "POST" });
 }

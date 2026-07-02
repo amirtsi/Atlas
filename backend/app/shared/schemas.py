@@ -340,6 +340,15 @@ class GoalCreate(AtlasModel):
     created_by: str = "user"
 
 
+class GoalUpdate(AtlasModel):
+    title: str | None = Field(default=None, min_length=1)
+    module_id: str | None = None
+    discipline_id: str | None = None
+    definition_of_done: str | None = None
+    target_date: str | None = None
+    capacity_minutes_per_week: int | None = None
+
+
 class GoalOut(AtlasResponse):
     id: str
     module_id: str | None = None
