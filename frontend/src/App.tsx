@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ClipboardList, MessageCircle, Gauge, History, Plus, ShieldCheck, Sparkles } from "lucide-react";
+import { ClipboardList, Compass, MessageCircle, Gauge, History, Plus, ShieldCheck, Sparkles } from "lucide-react";
 import { type AuditEvent, type ActivityTemplate, type ActivityTemplatePayload, type ActivityUpdatePayload, type CreateActivityPayload, type CommunicationMessage, type CommunicationProvider, type DashboardResponse, type Discipline, type JournalActivity, type LifeModule, type ModulePayload, type ModuleUpdatePayload, type QuickLogPayload, createCommunicationProvider, createActivityTemplate, archiveModule, pauseModule, resumeModule, createActivity, createModule, deleteActivity, updateActivity, getActivities, getActivityTemplates, getAuditEvents, getCommunicationMessages, getCommunicationProviders, getDashboard, getDisciplines, getModules, quickLog, sendCommunicationMessage, updateModule } from "./api/atlas";
 import { ApiUnavailablePanel, NewsTile, QuoteStrip } from "./features/widgets";
 import { JournalView } from "./features/journal";
@@ -8,7 +8,9 @@ import { LifePulse, MissionCenter, LifeTimeline, DashboardCalendar, RightNowHero
 import { AuditView } from "./features/audit";
 import { CommunicationView } from "./features/communication";
 import { QuickLogSheet } from "./features/quick-log";
-import { CoachInbox } from "./features/coach-inbox";
+import { OnboardingTour } from "./features/onboarding";
+
+const ONBOARDING_KEY = "atlas_onboarding_v1";
 import { CoachModal } from "./features/coach";
 
 
@@ -23,6 +25,7 @@ export function App() {
   const [communicationProviders, setCommunicationProviders] = useState<CommunicationProvider[]>([]);
   const [communicationMessages, setCommunicationMessages] = useState<CommunicationMessage[]>([]);
   const [isQuickLogOpen, setIsQuickLogOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
   const [coachOpen, setCoachOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<CockpitModalKind | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -85,6 +88,9 @@ export function App() {
         setCommunicationProviders(nextCommunicationProviders);
         setCommunicationMessages(nextCommunicationMessages);
         setError(null);
+        if (!localStorage.getItem(ONBOARDING_KEY)) {
+          setTourOpen(true);
+        }
       } catch {
         if (active) {
           setDashboard(null);
@@ -230,6 +236,11 @@ export function App() {
     }
   }
 
+  function dismissTour() {
+    localStorage.setItem(ONBOARDING_KEY, "done");
+    setTourOpen(false);
+  }
+
   const railItems = [
     { key: "dashboard" as const, label: "Dashboard", icon: <Gauge size={20} /> },
     { key: "journal" as const, label: "Journal", icon: <History size={20} /> },
@@ -265,6 +276,11 @@ export function App() {
           <span>רישום</span>
         </button>
 
+        <button className="rail-item rail-help" type="button" onClick={() => setTourOpen(true)}>
+          <Compass size={20} />
+          <span>סיור</span>
+        </button>
+
         <div className={`rail-status ${error ? "warn" : ""}`} role="status" aria-live="polite">
           <span className="rail-dot" aria-hidden="true" />
           <span>{statusLabel}</span>
@@ -291,8 +307,9 @@ export function App() {
               <section className="bento" aria-label="Atlas dashboard">
                 <RightNowHero
                   dashboard={dashboard}
-                  onOpen={() => setActiveModal("chief")}
+                  onOpen={() => setCoachOpen(true)}
                   onQuickLog={() => setIsQuickLogOpen(true)}
+                  onChanged={refreshDashboard}
                 />
                 <LifePulse dashboard={dashboard} onOpen={() => setActiveModal("pulse")} />
                 <MissionCenter dashboard={dashboard} onOpen={() => setActiveModal("missions")} />
@@ -303,7 +320,6 @@ export function App() {
                   onOpen={() => setActiveModal("calendar")}
                 />
                 <NewsTile />
-                <CoachInbox onChanged={refreshDashboard} onOpen={() => setCoachOpen(true)} />
               </section>
             </>
           ) : (
@@ -382,8 +398,15 @@ export function App() {
       ) : null}
 
       {coachOpen ? (
-        <CoachModal modules={modules} onClose={() => setCoachOpen(false)} onChanged={refreshDashboard} />
+        <CoachModal
+          modules={modules}
+          recommendations={dashboard?.recommendations ?? []}
+          onClose={() => setCoachOpen(false)}
+          onChanged={refreshDashboard}
+        />
       ) : null}
+
+      {tourOpen ? <OnboardingTour onClose={dismissTour} /> : null}
     </div>
   );
 }

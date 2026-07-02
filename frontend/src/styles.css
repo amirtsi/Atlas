@@ -625,8 +625,95 @@ button,
 
 .hero-content {
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
+  grid-template-rows: auto 1fr auto;
+  gap: var(--sp-3);
+  min-height: 0;
+}
+
+.hero-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: var(--sp-4);
+  min-height: 0;
+}
+
+.hero-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--sp-3);
+  min-width: 0;
+}
+
+.hero-aside {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding-inline-start: var(--sp-4);
+  border-inline-start: 1px solid var(--border-subtle);
+}
+
+.hero-coach {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-height: 0;
+}
+
+.hero-coach .coach-plan-line {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.hero-coach-inbox {
+  display: flex;
+  flex-direction: column;
   gap: var(--sp-2);
+}
+
+.hero-coach-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.hero-coach-label svg {
+  color: var(--accent);
+}
+
+/* Command Center — recommendations section */
+.coach-reco-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.coach-reco {
+  padding: var(--sp-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+}
+
+.coach-reco-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.coach-reco p {
+  margin: var(--sp-1) 0 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
 }
 
 .hero-head {
@@ -2637,6 +2724,18 @@ button,
     grid-template-rows: minmax(0, 1fr) auto;
   }
 
+  .hero-top {
+    grid-template-columns: 1fr;
+    gap: var(--sp-3);
+  }
+
+  .hero-aside {
+    padding-inline-start: 0;
+    padding-top: var(--sp-3);
+    border-inline-start: 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+
   .workspace {
     grid-row: 1;
     height: auto;
@@ -3413,11 +3512,23 @@ button,
   gap: var(--sp-2);
 }
 .coach-plan-topline strong {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.coach-plan-goal {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: 1;
+  min-width: 0;
+}
+
+.coach-plan-goal svg {
+  flex: 0 0 auto;
+  color: var(--accent);
 }
 .coach-plan-pct {
   font-variant-numeric: tabular-nums;
@@ -3508,5 +3619,285 @@ button,
 @media (max-width: 640px) {
   .coach-goal-form {
     grid-template-columns: 1fr;
+  }
+}
+
+/* =====================================================================
+   Command Center (unified Chief of Staff modal) — master/detail
+   ===================================================================== */
+.modal-sheet-wide {
+  width: min(1040px, 100%);
+}
+
+.command-center {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.cc-signals {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-3);
+}
+
+.cc-work {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.3fr);
+  gap: var(--sp-3);
+  align-items: start;
+}
+
+.cc-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-width: 0;
+  padding: var(--sp-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-lg);
+  background: var(--surface-1);
+}
+
+.cc-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.cc-card-head h3 {
+  margin: 0;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.cc-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-plan-goal {
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-weight: var(--fw-semibold);
+}
+
+.cc-plan-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.cc-plan-overall {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.cc-plan-pct-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.cc-plan-pct-big {
+  font-size: 30px;
+  font-weight: var(--fw-bold);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-drift {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-2);
+}
+
+.cc-drift-cell {
+  display: grid;
+  gap: 2px;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.cc-drift-cell span {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+}
+
+.cc-drift-cell strong {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+.cc-plan-actions {
+  margin-top: var(--sp-1);
+  display: flex;
+  gap: var(--sp-2);
+}
+
+/* Goal-create form inside the narrower goals column: title full, module+date
+   row, button full — prevents the 4-across form from overflowing the column. */
+.cc-goals .coach-goal-form {
+  grid-template-columns: 1fr 1fr;
+}
+
+.cc-goals .coach-goal-form input:first-child,
+.cc-goals .coach-goal-form button {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 860px) {
+  .cc-signals,
+  .cc-work {
+    grid-template-columns: 1fr;
+  }
+  .cc-goals .coach-goal-form {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* =====================================================================
+   Onboarding spotlight tour
+   ===================================================================== */
+.tour-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+}
+
+.tour-scrim-full {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 8, 13, 0.74);
+}
+
+.tour-spotlight {
+  position: absolute;
+  border-radius: var(--r-lg);
+  box-shadow: 0 0 0 9999px rgba(4, 8, 13, 0.74), 0 0 0 2px var(--accent);
+  transition: top var(--dur-2) var(--ease-out), left var(--dur-2) var(--ease-out),
+    width var(--dur-2) var(--ease-out), height var(--dur-2) var(--ease-out);
+  pointer-events: none;
+}
+
+.tour-tooltip {
+  position: absolute;
+  width: min(340px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow-card);
+  outline: none;
+  animation: sheet-in var(--dur-2) var(--ease-out);
+}
+
+.tour-tooltip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.tour-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tour-eyebrow svg {
+  color: var(--accent);
+}
+
+.tour-tooltip h3 {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+}
+
+.tour-tooltip p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+}
+
+.tour-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+.tour-dots {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.tour-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--border-strong);
+  transition: width var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
+}
+
+.tour-dot.active {
+  width: 16px;
+  background: var(--accent);
+}
+
+.tour-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.tour-btn {
+  min-height: 34px;
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-sm);
+}
+
+/* Respect users who prefer reduced motion (accessibility) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

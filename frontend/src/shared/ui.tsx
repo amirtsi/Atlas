@@ -75,12 +75,14 @@ export function Modal({
   eyebrow,
   title,
   onClose,
-  children
+  children,
+  size = "default"
 }: {
   eyebrow?: string;
   title: string;
   onClose: () => void;
   children: React.ReactNode;
+  size?: "default" | "wide";
 }) {
   const sheetRef = useRef<HTMLDivElement>(null);
 
@@ -102,7 +104,7 @@ export function Modal({
   return (
     <div className="modal-overlay" role="presentation" onClick={onClose}>
       <div
-        className="modal-sheet"
+        className={`modal-sheet ${size === "wide" ? "modal-sheet-wide" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}
