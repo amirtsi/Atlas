@@ -4064,6 +4064,9 @@ button,
 .tour-dots {
   display: inline-flex;
   gap: 5px;
+  /* Progress reads left-to-right (active = step N from the left) even in the RTL
+     tour, so the dots match the "N/total" counter instead of reversing. */
+  direction: ltr;
 }
 
 .tour-dot {
