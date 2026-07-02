@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowDownToLine, ArrowUpFromLine, MessageCircle, QrCode, RefreshCw, Send } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, QrCode, RefreshCw, Send } from "lucide-react";
 import {
   type CommunicationMessage,
   type CommunicationProvider,
@@ -7,13 +7,13 @@ import {
   type WhatsAppQr,
   type WhatsAppStatus,
   DEFAULT_WHATSAPP_RECIPIENT,
-  DEFAULT_WHATSAPP_RECIPIENT_LOCAL,
   getDailyBriefSchedule,
   getWhatsAppStatus,
   requestWhatsAppQr
 } from "../api/atlas";
 import { Chip } from "../shared/ui";
 import { formatActivityTime } from "../shared/format";
+import { type HubState, dailyBriefLabel, formatLineTime, hubState, lastMessageTimes, lineChecklist } from "./communication-logic";
 
 // Raw transport errors -> plain language the owner can act on.
 function humanizeError(error: string | null | undefined): string | null {
@@ -24,21 +24,6 @@ function humanizeError(error: string | null | undefined): string | null {
     return "הגשר של WhatsApp לא היה פעיל כשההודעה נשלחה — היא לא יצאה. ודא שהגשר רץ ונסה שוב.";
   }
   return error;
-}
-
-type HubState = "connected" | "needs_scan" | "bridge_down" | "unconfigured" | "loading";
-
-function hubState(status: WhatsAppStatus | null): HubState {
-  if (!status) {
-    return "loading";
-  }
-  if (!status.configured || status.bridge === "unconfigured") {
-    return "unconfigured";
-  }
-  if (status.bridge === "down") {
-    return "bridge_down";
-  }
-  return status.session === "open" ? "connected" : "needs_scan";
 }
 
 const STATE_LABEL: Record<HubState, { label: string; accent: "green" | "orange" | "red" | "neutral" }> = {
@@ -68,6 +53,8 @@ export function CommunicationView({
   const [qr, setQr] = useState<WhatsAppQr | null>(null);
   const [qrBusy, setQrBusy] = useState(false);
   const [schedule, setSchedule] = useState<DailyBriefSchedule | null>(null);
+  const [lastChecked, setLastChecked] = useState<Date | null>(null);
+  const [refreshBusy, setRefreshBusy] = useState(false);
   const pollRef = useRef<number | null>(null);
 
   const provider = providers[0];
@@ -75,19 +62,32 @@ export function CommunicationView({
     typeof provider?.config?.default_recipient === "string" ? provider.config.default_recipient : DEFAULT_WHATSAPP_RECIPIENT;
   const state = hubState(status);
   const stateMeta = STATE_LABEL[state];
+  const checklist = lineChecklist(state, status?.owner ?? (status?.configured ? DEFAULT_WHATSAPP_RECIPIENT : null));
+  const lastTimes = lastMessageTimes(messages);
+  const briefLabel = dailyBriefLabel(schedule);
+  const renderedAt = new Date();
 
   const refreshStatus = useCallback(async () => {
     try {
       setStatus(await getWhatsAppStatus());
+      setLastChecked(new Date());
     } catch {
       setStatus(null);
     }
   }, []);
 
+  const refreshSchedule = useCallback(async () => {
+    try {
+      setSchedule(await getDailyBriefSchedule());
+    } catch {
+      setSchedule(null);
+    }
+  }, []);
+
   useEffect(() => {
     refreshStatus();
-    getDailyBriefSchedule().then(setSchedule).catch(() => setSchedule(null));
-  }, [refreshStatus]);
+    refreshSchedule();
+  }, [refreshStatus, refreshSchedule]);
 
   // While a QR is on screen, poll until the phone links, then clear it.
   useEffect(() => {
@@ -116,6 +116,15 @@ export function CommunicationView({
       return current;
     });
   }, [providerDefaultRecipient]);
+
+  async function refreshLine() {
+    setRefreshBusy(true);
+    try {
+      await Promise.all([refreshStatus(), refreshSchedule()]);
+    } finally {
+      setRefreshBusy(false);
+    }
+  }
 
   async function showQr() {
     setQrBusy(true);
@@ -159,16 +168,41 @@ export function CommunicationView({
                 <span className="panel-eyebrow">חיבור</span>
                 <h2>מצב הקו</h2>
               </div>
-              <div className="panel-icon">
-                <MessageCircle size={21} />
-              </div>
+              <button className="wa-refresh" type="button" onClick={refreshLine} disabled={refreshBusy}>
+                <RefreshCw size={15} className={refreshBusy ? "wa-spin" : undefined} aria-hidden="true" />
+                רענן
+              </button>
             </header>
 
-            {state === "connected" ? (
-              <p className="wa-explain">
-                ✅ הכול מחובר. המספר המקושר: <strong dir="ltr">{DEFAULT_WHATSAPP_RECIPIENT_LOCAL}</strong>. אפשר לכתוב
-                ל-Atlas ב-WhatsApp והוא יגיב.
-              </p>
+            <div className="wa-status-rows" role="list" aria-label="שרשרת החיבור">
+              {checklist.map((row) => (
+                <div className="wa-status-row" role="listitem" key={row.key}>
+                  <span className={`wa-status-dot wa-dot-${row.accent}`} aria-hidden="true" />
+                  <span className="wa-status-label">{row.label}</span>
+                  <span className="wa-status-value" dir="auto">
+                    {row.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {status?.configured ? (
+              <div className="wa-status-rows" aria-label="פעילות הקו">
+                <div className="wa-status-row">
+                  <span className="wa-status-label">הודעה אחרונה ממך</span>
+                  <span className="wa-status-value">{formatLineTime(lastTimes.inbound, renderedAt)}</span>
+                </div>
+                <div className="wa-status-row">
+                  <span className="wa-status-label">הודעה אחרונה מ-Atlas</span>
+                  <span className="wa-status-value">{formatLineTime(lastTimes.outbound, renderedAt)}</span>
+                </div>
+                {briefLabel ? (
+                  <div className="wa-status-row">
+                    <span className="wa-status-label">תדרוך יומי</span>
+                    <span className="wa-status-value">{briefLabel}</span>
+                  </div>
+                ) : null}
+              </div>
             ) : null}
 
             {state === "needs_scan" ? (
@@ -225,6 +259,10 @@ export function CommunicationView({
                 <Chip accent="orange">dry-run</Chip> מצב תרגול — הודעות לא באמת נשלחות.
               </p>
             ) : null}
+
+            <footer className="wa-status-footer">
+              {lastChecked ? `נבדק לאחרונה ${formatActivityTime(lastChecked.toISOString())}` : "טרם נבדק"}
+            </footer>
           </div>
         </section>
 
