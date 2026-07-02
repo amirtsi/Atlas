@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ClipboardList, MessageCircle, Gauge, History, Plus, ShieldCheck, Sparkles } from "lucide-react";
+import { ClipboardList, Compass, MessageCircle, Gauge, History, Plus, ShieldCheck, Sparkles } from "lucide-react";
 import { type AuditEvent, type ActivityTemplate, type ActivityTemplatePayload, type ActivityUpdatePayload, type CreateActivityPayload, type CommunicationMessage, type CommunicationProvider, type DashboardResponse, type Discipline, type JournalActivity, type LifeModule, type ModulePayload, type ModuleUpdatePayload, type QuickLogPayload, createCommunicationProvider, createActivityTemplate, archiveModule, pauseModule, resumeModule, createActivity, createModule, deleteActivity, updateActivity, getActivities, getActivityTemplates, getAuditEvents, getCommunicationMessages, getCommunicationProviders, getDashboard, getDisciplines, getModules, quickLog, sendCommunicationMessage, updateModule } from "./api/atlas";
 import { ApiUnavailablePanel, NewsTile, QuoteStrip } from "./features/widgets";
 import { JournalView } from "./features/journal";
@@ -8,6 +8,9 @@ import { LifePulse, MissionCenter, LifeTimeline, DashboardCalendar, RightNowHero
 import { AuditView } from "./features/audit";
 import { CommunicationView } from "./features/communication";
 import { QuickLogSheet } from "./features/quick-log";
+import { OnboardingTour } from "./features/onboarding";
+
+const ONBOARDING_KEY = "atlas_onboarding_v1";
 import { CoachModal } from "./features/coach";
 
 
@@ -22,6 +25,7 @@ export function App() {
   const [communicationProviders, setCommunicationProviders] = useState<CommunicationProvider[]>([]);
   const [communicationMessages, setCommunicationMessages] = useState<CommunicationMessage[]>([]);
   const [isQuickLogOpen, setIsQuickLogOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
   const [coachOpen, setCoachOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<CockpitModalKind | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -84,6 +88,9 @@ export function App() {
         setCommunicationProviders(nextCommunicationProviders);
         setCommunicationMessages(nextCommunicationMessages);
         setError(null);
+        if (!localStorage.getItem(ONBOARDING_KEY)) {
+          setTourOpen(true);
+        }
       } catch {
         if (active) {
           setDashboard(null);
@@ -229,6 +236,11 @@ export function App() {
     }
   }
 
+  function dismissTour() {
+    localStorage.setItem(ONBOARDING_KEY, "done");
+    setTourOpen(false);
+  }
+
   const railItems = [
     { key: "dashboard" as const, label: "Dashboard", icon: <Gauge size={20} /> },
     { key: "journal" as const, label: "Journal", icon: <History size={20} /> },
@@ -262,6 +274,11 @@ export function App() {
         <button className="rail-log" type="button" onClick={() => setIsQuickLogOpen(true)}>
           <Plus size={22} strokeWidth={2.6} />
           <span>רישום</span>
+        </button>
+
+        <button className="rail-item rail-help" type="button" onClick={() => setTourOpen(true)}>
+          <Compass size={20} />
+          <span>סיור</span>
         </button>
 
         <div className={`rail-status ${error ? "warn" : ""}`} role="status" aria-live="polite">
@@ -388,6 +405,8 @@ export function App() {
           onChanged={refreshDashboard}
         />
       ) : null}
+
+      {tourOpen ? <OnboardingTour onClose={dismissTour} /> : null}
     </div>
   );
 }

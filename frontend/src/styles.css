@@ -3779,6 +3779,117 @@ button,
   }
 }
 
+/* =====================================================================
+   Onboarding spotlight tour
+   ===================================================================== */
+.tour-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+}
+
+.tour-scrim-full {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 8, 13, 0.74);
+}
+
+.tour-spotlight {
+  position: absolute;
+  border-radius: var(--r-lg);
+  box-shadow: 0 0 0 9999px rgba(4, 8, 13, 0.74), 0 0 0 2px var(--accent);
+  transition: top var(--dur-2) var(--ease-out), left var(--dur-2) var(--ease-out),
+    width var(--dur-2) var(--ease-out), height var(--dur-2) var(--ease-out);
+  pointer-events: none;
+}
+
+.tour-tooltip {
+  position: absolute;
+  width: min(340px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow-card);
+  outline: none;
+  animation: sheet-in var(--dur-2) var(--ease-out);
+}
+
+.tour-tooltip-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.tour-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tour-eyebrow svg {
+  color: var(--accent);
+}
+
+.tour-tooltip h3 {
+  margin: 0;
+  font-size: var(--fs-lg);
+  font-weight: var(--fw-semibold);
+}
+
+.tour-tooltip p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  line-height: 1.55;
+}
+
+.tour-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+}
+
+.tour-dots {
+  display: inline-flex;
+  gap: 5px;
+}
+
+.tour-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--border-strong);
+  transition: width var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
+}
+
+.tour-dot.active {
+  width: 16px;
+  background: var(--accent);
+}
+
+.tour-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.tour-btn {
+  min-height: 34px;
+  padding: 0 var(--sp-3);
+  font-size: var(--fs-sm);
+}
+
 /* Respect users who prefer reduced motion (accessibility) */
 @media (prefers-reduced-motion: reduce) {
   *,
