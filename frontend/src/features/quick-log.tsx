@@ -1,6 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { type ActivityTemplate, type ActivityTemplatePayload, type Discipline, type LifeModule, type QuickLogPayload } from "../api/atlas";
+import {
+  type ActivityTemplate,
+  type ActivityTemplatePayload,
+  type Discipline,
+  type LifeModule,
+  type PlanStep,
+  type QuickLogPayload,
+  getGoalPlan,
+  getGoals
+} from "../api/atlas";
 import { moduleTypeLabel, toOptionalMinutes } from "../shared/format";
 
 export function QuickLogSheet({
@@ -23,7 +32,7 @@ export function QuickLogSheet({
   error: string | null;
   onClose: () => void;
   onTemplateLog: (templateId: string) => void;
-  onCustomLog: (payload: QuickLogPayload) => void;
+  onCustomLog: (payload: QuickLogPayload, stepId?: string) => void;
   onCreateTemplate: (payload: ActivityTemplatePayload) => void;
 }) {
   const [mode, setMode] = useState<"templates" | "custom" | "template">("templates");
@@ -31,9 +40,38 @@ export function QuickLogSheet({
   const [customModuleId, setCustomModuleId] = useState("");
   const [customDuration, setCustomDuration] = useState("30");
   const [customNotes, setCustomNotes] = useState("");
+  const [customStepId, setCustomStepId] = useState("");
+  const [planSteps, setPlanSteps] = useState<PlanStep[]>([]);
   const [templateTitle, setTemplateTitle] = useState("");
   const [templateModuleId, setTemplateModuleId] = useState("");
   const [templateDuration, setTemplateDuration] = useState("30");
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    let active = true;
+    // Best-effort: offer the top active goal's not-done steps to attach to.
+    (async () => {
+      try {
+        const goals = await getGoals("active");
+        if (!goals.length) {
+          return;
+        }
+        const plan = await getGoalPlan(goals[0].id);
+        if (active) {
+          setPlanSteps(plan.steps.filter((s) => s.progress.status !== "done"));
+        }
+      } catch {
+        if (active) {
+          setPlanSteps([]);
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [isOpen]);
 
   if (!isOpen) {
     return null;
@@ -49,14 +87,18 @@ export function QuickLogSheet({
     if (!title) {
       return;
     }
-    onCustomLog({
-      title,
-      module_id: customModuleId || undefined,
-      discipline_id: selectedCustomModule ? selectedCustomModule.discipline_id : fallbackDisciplineId,
-      activity_type: selectedCustomModule?.type ?? "manual",
-      duration_minutes: toOptionalMinutes(customDuration),
-      notes: customNotes.trim() || undefined
-    });
+    onCustomLog(
+      {
+        title,
+        module_id: customModuleId || undefined,
+        discipline_id: selectedCustomModule ? selectedCustomModule.discipline_id : fallbackDisciplineId,
+        activity_type: selectedCustomModule?.type ?? "manual",
+        duration_minutes: toOptionalMinutes(customDuration),
+        notes: customNotes.trim() || undefined
+      },
+      customStepId || undefined
+    );
+    setCustomStepId("");
   }
 
   function submitTemplate(event: React.FormEvent<HTMLFormElement>) {
@@ -153,6 +195,19 @@ export function QuickLogSheet({
                 />
               </label>
             </div>
+            {planSteps.length ? (
+              <label>
+                <span>קשר לצעד בתוכנית (אופציונלי)</span>
+                <select value={customStepId} onChange={(event) => setCustomStepId(event.target.value)}>
+                  <option value="">ללא</option>
+                  {planSteps.map((step) => (
+                    <option key={step.id} value={step.id}>
+                      {step.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label>
               <span>Note</span>
               <textarea value={customNotes} onChange={(event) => setCustomNotes(event.target.value)} placeholder="אופציונלי" />
