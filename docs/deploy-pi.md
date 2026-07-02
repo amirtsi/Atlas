@@ -92,14 +92,17 @@ stats, brief) and a note per goal (plan checkboxes with real progress + drift),
 all inside an `Atlas/` folder it owns. Refreshes every 15 minutes + on
 `POST /api/v1/obsidian/export`.
 
-1. Sync your vault to the Pi with [Syncthing](https://syncthing.net) (install on the
-   Pi + your Mac/phone, share the vault folder both ways).
-2. Start the app stack with the Obsidian overlay:
+No vault yet? You don't need Obsidian on the Pi — a vault is just a folder of
+markdown. The overlay creates `./obsidian-vault` next to the repo on first run:
 
 ```bash
-ATLAS_OBSIDIAN_VAULT_DIR=/home/pi/ObsidianVault \
 docker compose -f docker-compose.yml -f docker-compose.obsidian.yml up -d --build
 ```
+
+To read the notes in Obsidian later: install [Syncthing](https://syncthing.net) on
+the Pi + your Mac/phone, share the `obsidian-vault` folder both ways, and open the
+synced copy as a vault in Obsidian. Already have a vault synced to the Pi? Point the
+overlay at it instead: `ATLAS_OBSIDIAN_VAULT_DIR=/home/pi/MyVault docker compose …`
 
 Notes appear under `Atlas/Daily/` and `Atlas/Goals/` in the vault and sync back to
 every device. Files carry `generated_by: atlas` frontmatter — they're derived views

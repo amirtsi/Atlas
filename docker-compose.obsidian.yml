@@ -1,14 +1,14 @@
 # Obsidian projection overlay for the Atlas app stack.
 #
-# Mounts a (Syncthing-synced) Obsidian vault into the backend container and
-# turns the export on. Set ATLAS_OBSIDIAN_VAULT_DIR to the vault path on the
-# host, then run BOTH files:
-#
-#   ATLAS_OBSIDIAN_VAULT_DIR=/home/pi/ObsidianVault \
 #   docker compose -f docker-compose.yml -f docker-compose.obsidian.yml up -d --build
+#
+# By default the vault is ./obsidian-vault next to the repo — created on first
+# run, no Obsidian install needed on the Pi (a vault is just a folder of
+# markdown). Later, sync that folder to your Mac/phone with Syncthing and open
+# it in Obsidian, or point ATLAS_OBSIDIAN_VAULT_DIR at an existing vault.
 services:
   atlas-backend:
     environment:
       ATLAS_OBSIDIAN_VAULT: /vault
     volumes:
-      - ${ATLAS_OBSIDIAN_VAULT_DIR:?set ATLAS_OBSIDIAN_VAULT_DIR to your vault path}:/vault
+      - ${ATLAS_OBSIDIAN_VAULT_DIR:-./obsidian-vault}:/vault
