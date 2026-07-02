@@ -2180,10 +2180,10 @@ button,
 
 .calendar-day {
   display: grid;
-  min-height: 92px;
+  min-height: 64px;
   align-content: space-between;
   gap: var(--sp-1);
-  padding: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
   border: 1px solid var(--border-subtle);
   border-radius: var(--r-md);
   color: var(--text-primary);
@@ -2203,8 +2203,8 @@ button,
 }
 
 .calendar-day.has-activity {
-  border-color: var(--border-strong);
-  background: var(--surface-2);
+  border-color: var(--border-accent);
+  background: var(--accent-soft);
 }
 
 .calendar-day.selected {
@@ -2220,8 +2220,8 @@ button,
 }
 
 .calendar-day strong {
-  color: var(--blue);
-  font-size: var(--fs-2xl);
+  color: var(--accent-strong);
+  font-size: var(--fs-xl);
   font-weight: var(--fw-bold);
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -2492,8 +2492,8 @@ button,
 .module-row-controls input:focus,
 .module-row-controls select:focus,
 .behavior-grid input:focus {
-  border-color: var(--border-bright);
-  box-shadow: 0 0 0 3px var(--blue-soft);
+  border-color: var(--border-accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .module-form textarea {
@@ -2510,22 +2510,23 @@ button,
 
 .module-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(430px, 0.64fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: var(--sp-4);
   align-items: center;
-  padding: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--r-lg);
-  background:
-    linear-gradient(160deg, var(--glass-highlight), transparent 42%),
-    var(--surface);
-  box-shadow: var(--shadow-2);
-  transition: border-color var(--dur-1) var(--ease-out);
+  border-radius: var(--r-md);
+  background: var(--surface-1);
+  transition: border-color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
+}
+
+.module-row:hover {
+  border-color: var(--border-strong);
 }
 
 .module-row.selected {
-  border-color: var(--border-bright);
-  box-shadow: 0 0 0 1px var(--border-bright), var(--shadow-2);
+  border-color: var(--border-accent);
+  background: var(--accent-soft);
 }
 
 .module-row-main {
@@ -2548,21 +2549,27 @@ button,
 
 .module-row-controls {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) 84px 92px 104px;
+  grid-template-columns: 132px 76px auto auto;
   gap: var(--sp-2);
   align-items: end;
 }
 
+.module-row-controls input,
+.module-row-controls select {
+  min-height: 42px;
+}
+
 .module-save {
   display: inline-flex;
-  min-height: 50px;
+  min-height: 42px;
   align-items: center;
   justify-content: center;
   gap: 7px;
-  border: 1px solid var(--border-bright);
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--border-accent);
   border-radius: var(--r-md);
-  color: var(--blue);
-  background: var(--blue-soft);
+  color: var(--accent-strong);
+  background: var(--accent-soft);
   font-weight: var(--fw-semibold);
   cursor: pointer;
   transition: filter var(--dur-1) var(--ease-out);

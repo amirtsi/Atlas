@@ -836,7 +836,9 @@ export function CockpitModal({
           <div className="detail-bars">
             {items.map((item) => {
               const accent = accentForSlug(item.discipline_slug);
-              const width = Math.max(6, Math.round((item.duration_minutes / maxDuration) * 100));
+              // Empty disciplines read as empty (no phantom nub); non-empty keep a
+              // visible minimum so a tiny value is still perceptible.
+              const width = item.duration_minutes > 0 ? Math.max(4, Math.round((item.duration_minutes / maxDuration) * 100)) : 0;
               return (
                 <div className="pulse-bar-row" key={item.discipline_id}>
                   <div className="pulse-bar-head">
