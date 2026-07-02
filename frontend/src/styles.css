@@ -659,6 +659,24 @@ button,
   flex-direction: column;
   gap: var(--sp-3);
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* In the compact hero aside, long AI-generated proposal text must not overflow
+   the tile — clamp it (the full rationale lives in the Command Center modal). */
+.hero-coach .coach-proposal-body strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hero-coach .coach-proposal-body p {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .hero-coach .coach-plan-line {
@@ -3596,6 +3614,7 @@ button,
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .coach-proposal-body strong {
