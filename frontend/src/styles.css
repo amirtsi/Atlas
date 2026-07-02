@@ -4206,11 +4206,11 @@ button,
 
 .tour-tooltip {
   position: absolute;
-  width: min(340px, calc(100vw - 24px));
+  width: min(330px, calc(100vw - 24px));
   display: flex;
   flex-direction: column;
   gap: var(--sp-2);
-  padding: var(--sp-4);
+  padding: var(--sp-3);
   border: 1px solid var(--border-strong);
   border-radius: var(--r-lg);
   background: var(--surface-strong);
@@ -4255,8 +4255,8 @@ button,
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   margin: var(--sp-1) auto 0;
   border-radius: var(--r-pill);
   color: var(--accent);
@@ -4281,40 +4281,44 @@ button,
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* The foot must never outgrow the card: dots + up to three buttons wrap
+     instead of spilling the primary button past the tooltip edge. */
+  flex-wrap: wrap;
   gap: var(--sp-2);
   margin-top: var(--sp-2);
 }
 
 .tour-dots {
   display: inline-flex;
-  gap: 5px;
+  gap: 4px;
   /* Progress reads left-to-right (active = step N from the left) even in the RTL
      tour, so the dots match the "N/total" counter instead of reversing. */
   direction: ltr;
 }
 
 .tour-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: var(--r-pill);
   background: var(--border-strong);
   transition: width var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
 }
 
 .tour-dot.active {
-  width: 16px;
+  width: 14px;
   background: var(--accent);
 }
 
 .tour-actions {
   display: flex;
-  gap: var(--sp-2);
+  gap: 6px;
 }
 
 .tour-btn {
-  min-height: 34px;
-  padding: 0 var(--sp-3);
-  font-size: var(--fs-sm);
+  min-height: 28px;
+  gap: 6px;
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-xs);
 }
 
 /* Respect users who prefer reduced motion (accessibility) */
