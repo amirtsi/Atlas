@@ -139,19 +139,18 @@ export function CoachInbox({
     return (
       <div className="hero-coach">
         {planLine()}
-        <div className="hero-coach-inbox">
-          <span className="hero-coach-label">
-            <Inbox size={14} />
-            {proposals.length ? `${proposals.length} הצעות ממתינות` : "המאמן"}
-          </span>
-          {loading ? (
-            <p className="empty-panel-copy">טוען…</p>
-          ) : proposals.length ? (
-            <div className="coach-inbox-list">{proposals.slice(0, 2).map(proposalRow)}</div>
-          ) : topPlan ? null : (
-            <p className="empty-panel-copy">אין הצעות. המאמן יציע צעדים מנתונים אמיתיים.</p>
-          )}
-        </div>
+        {loading ? null : proposals.length ? (
+          <div className="hero-coach-inbox">
+            <span className="hero-coach-label">
+              <Inbox size={14} />
+              {proposals.length === 1 ? "הצעה אחת ממתינה" : `${proposals.length} הצעות ממתינות`}
+            </span>
+            <p className="hero-coach-peek" dir="auto">{proposals[0].title}</p>
+            <span className="hero-coach-cta">פתח את מרכז הפיקוד לאישור ←</span>
+          </div>
+        ) : topPlan ? null : (
+          <p className="empty-panel-copy">אין הצעות. המאמן יציע צעדים מנתונים אמיתיים.</p>
+        )}
       </div>
     );
   }
