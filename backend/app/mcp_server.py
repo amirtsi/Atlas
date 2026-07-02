@@ -12,6 +12,7 @@ NOTE: app.main must never import this module, so the core app stays importable
 without the optional `mcp` dependency.
 """
 
+from fastapi import HTTPException
 from mcp.server.fastmcp import FastMCP
 
 from app.core.database import db_connection, rows_to_dicts
@@ -57,8 +58,6 @@ def list_goals(status: str | None = None) -> list[dict]:
 
 def get_goal_plan(goal_id: str) -> dict:
     """Active/latest plan for a goal with real per-step progress and drift."""
-    from fastapi import HTTPException
-
     try:
         with db_connection() as conn:
             result = _get_goal_plan(conn, goal_id)
@@ -94,8 +93,6 @@ def list_proposals(status: str = "pending") -> list[dict]:
 
 def propose_module_status(module_id: str, status: str, rationale: str) -> dict:
     """Propose setting a module's status (pending; owner must accept to apply)."""
-    from fastapi import HTTPException
-
     try:
         with db_connection() as conn:
             return _create_proposal(
@@ -112,8 +109,6 @@ def propose_module_status(module_id: str, status: str, rationale: str) -> dict:
 
 def propose_module_priority(module_id: str, priority: int, rationale: str) -> dict:
     """Propose setting a module's priority (pending; owner must accept to apply)."""
-    from fastapi import HTTPException
-
     try:
         with db_connection() as conn:
             return _create_proposal(
@@ -134,8 +129,6 @@ def propose_plan(goal_id: str) -> dict:
     Key-gated: without an AI key the planning service raises 422 and this returns
     an error object — never a fabricated plan.
     """
-    from fastapi import HTTPException
-
     try:
         with db_connection() as conn:
             return _propose_plan_for_goal(conn, goal_id, created_by="hermes")
@@ -145,8 +138,6 @@ def propose_plan(goal_id: str) -> dict:
 
 def request_replan(goal_id: str) -> dict:
     """Request a drift-driven re-plan proposal for a goal (pending; key-gated)."""
-    from fastapi import HTTPException
-
     try:
         with db_connection() as conn:
             result = _generate_replan_proposal(conn, goal_id, created_by="hermes")

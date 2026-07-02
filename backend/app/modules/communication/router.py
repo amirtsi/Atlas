@@ -473,7 +473,6 @@ def _compose_daily_brief(dashboard: dict) -> str:
         f"השבוע: {signals.get('week_activity_count', 0)} פעולות · "
         f"{signals.get('week_duration_minutes', 0)} דק׳"
     )
-    from app.core.database import db_connection
     with db_connection() as conn:
         plan_line = active_goal_brief_line(conn)
     if plan_line:
