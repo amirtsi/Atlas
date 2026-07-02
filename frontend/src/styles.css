@@ -3675,6 +3675,112 @@ button,
   opacity: 0.7;
   font-variant-numeric: tabular-nums;
 }
+
+.coach-step-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+}
+
+.coach-link-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-medium);
+}
+
+.coach-link-toggle:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
+}
+
+.coach-link-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: var(--sp-2);
+}
+
+.coach-link-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 4px 2px 8px;
+  border: 1px solid var(--accent);
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  color: var(--text-primary);
+  font-size: var(--fs-xs);
+}
+
+.coach-link-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coach-link-chip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.coach-link-chip button:hover {
+  color: var(--text-primary);
+}
+
+.coach-link-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.coach-link-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: var(--sp-1) var(--sp-2);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: start;
+  font-size: var(--fs-sm);
+}
+
+.coach-link-option:hover {
+  background: var(--surface-1);
+}
+
+.coach-link-option span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .coach-plan-actions {
   margin-top: var(--sp-3);
   display: flex;

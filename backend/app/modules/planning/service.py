@@ -106,21 +106,29 @@ def evaluate_step(conn: Connection, step: dict, since: str | None = None) -> dic
         ).fetchone()["c"]
         last = None
     else:
-        where = ["a.module_id = ?"]
+        conditions = ["a.module_id = ?"]
         params: list[object] = [rule.get("module_id")]
         if rule.get("activity_type"):
-            where.append("a.activity_type = ?")
+            conditions.append("a.activity_type = ?")
             params.append(rule["activity_type"])
         if rule.get("match"):
-            where.append("(LOWER(a.title) LIKE ? OR LOWER(COALESCE(a.notes, '')) LIKE ?)")
+            conditions.append("(LOWER(a.title) LIKE ? OR LOWER(COALESCE(a.notes, '')) LIKE ?)")
             like = f"%{str(rule['match']).lower()}%"
             params.extend([like, like])
         if since:
-            where.append("a.occurred_at >= ?")
+            conditions.append("a.occurred_at >= ?")
             params.append(since)
         agg = "COALESCE(SUM(a.duration_minutes), 0)" if rtype == "duration" else "COUNT(a.id)"
+        # Rule-matched activities UNION any explicitly linked to this step. Linked
+        # activities are credited even outside the rule / since window (explicit
+        # intent). Dedup is automatic — each activity row is counted once.
+        where_sql = (
+            f"(({' AND '.join(conditions)}) "
+            "OR a.id IN (SELECT activity_id FROM plan_step_links WHERE step_id = ?))"
+        )
+        params.append(step["id"])
         row = conn.execute(
-            f"SELECT {agg} AS v, MAX(a.occurred_at) AS last FROM activities a WHERE {' AND '.join(where)}",
+            f"SELECT {agg} AS v, MAX(a.occurred_at) AS last FROM activities a WHERE {where_sql}",
             params,
         ).fetchone()
         done = row["v"] or 0
@@ -130,6 +138,47 @@ def evaluate_step(conn: Connection, step: dict, since: str | None = None) -> dic
     ratio = min(1.0, done / target) if target else 0.0
     status = "done" if target and done >= target else "in_progress" if done else "pending"
     return {"done": done, "target": target, "ratio": ratio, "status": status, "last_activity_at": last}
+
+
+def _step_link_ids(conn: Connection, step_id: str) -> list[str]:
+    rows = conn.execute("SELECT activity_id FROM plan_step_links WHERE step_id = ?", (step_id,)).fetchall()
+    return [r["activity_id"] for r in rows]
+
+
+def link_activity_to_step(conn: Connection, step_id: str, activity_id: str) -> dict:
+    """Explicitly credit a real activity to a plan step (idempotent). Audited."""
+    get_or_404(conn, "plan_steps", step_id)
+    get_or_404(conn, "activities", activity_id)
+    conn.execute(
+        "INSERT OR IGNORE INTO plan_step_links (step_id, activity_id) VALUES (?, ?)",
+        (step_id, activity_id),
+    )
+    record_audit_event(
+        conn,
+        entity_type="plan_step",
+        entity_id=step_id,
+        action="linked",
+        summary="Activity linked to plan step",
+        changes={"activity_id": activity_id},
+    )
+    return {"step_id": step_id, "linked_activity_ids": _step_link_ids(conn, step_id)}
+
+
+def unlink_activity_from_step(conn: Connection, step_id: str, activity_id: str) -> dict:
+    """Remove an explicit activity↔step link. Audited."""
+    get_or_404(conn, "plan_steps", step_id)
+    conn.execute(
+        "DELETE FROM plan_step_links WHERE step_id = ? AND activity_id = ?", (step_id, activity_id)
+    )
+    record_audit_event(
+        conn,
+        entity_type="plan_step",
+        entity_id=step_id,
+        action="unlinked",
+        summary="Activity unlinked from plan step",
+        changes={"activity_id": activity_id},
+    )
+    return {"step_id": step_id, "linked_activity_ids": _step_link_ids(conn, step_id)}
 
 
 def _activate_plan_handler(conn: Connection, payload: dict) -> dict:
@@ -250,6 +299,7 @@ def get_goal_plan(conn: Connection, goal_id: str) -> dict | None:
     since = plan["activated_at"] if plan["status"] == "active" else None
     for step in steps:
         step["progress"] = evaluate_step(conn, step, since=since)
+        step["linked_activity_ids"] = _step_link_ids(conn, step["id"])
     done = sum(1 for s in steps if s["progress"]["status"] == "done")
     overall = round(100 * done / len(steps)) if steps else 0
     drift = compute_drift(goal, plan, overall / 100)

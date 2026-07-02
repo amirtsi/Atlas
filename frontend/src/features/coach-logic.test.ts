@@ -9,7 +9,8 @@ function step(sequence: number, status: string): PlanStep {
     description: null,
     kind: "topic",
     sequence,
-    progress: { done: 0, target: 1, ratio: 0, status, last_activity_at: null }
+    progress: { done: 0, target: 1, ratio: 0, status, last_activity_at: null },
+    linked_activity_ids: []
   };
 }
 

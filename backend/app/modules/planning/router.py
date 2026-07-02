@@ -6,10 +6,12 @@ from app.modules.planning.service import (
     create_goal,
     generate_replan_proposal,
     get_goal_plan,
+    link_activity_to_step,
     propose_plan_for_goal,
+    unlink_activity_from_step,
     update_goal,
 )
-from app.shared.schemas import GoalCreate, GoalOut, GoalUpdate, ProposalOut
+from app.shared.schemas import GoalCreate, GoalOut, GoalUpdate, ProposalOut, StepLinkCreate
 
 router = APIRouter(prefix="/planning", tags=["planning"])
 
@@ -42,6 +44,18 @@ def edit_goal(goal_id: str, payload: GoalUpdate) -> dict:
 def delete_goal(goal_id: str) -> dict:
     with db_connection() as conn:
         return abandon_goal(conn, goal_id)
+
+
+@router.post("/steps/{step_id}/links")
+def link_step_activity(step_id: str, payload: StepLinkCreate) -> dict:
+    with db_connection() as conn:
+        return link_activity_to_step(conn, step_id, payload.activity_id)
+
+
+@router.delete("/steps/{step_id}/links/{activity_id}")
+def unlink_step_activity(step_id: str, activity_id: str) -> dict:
+    with db_connection() as conn:
+        return unlink_activity_from_step(conn, step_id, activity_id)
 
 
 @router.post("/goals/{goal_id}/propose-plan", response_model=ProposalOut)
