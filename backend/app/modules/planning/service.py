@@ -304,11 +304,9 @@ def generate_replan_proposal(conn: Connection, goal_id: str, created_by: str = "
     if drift is not None and drift["on_track"]:
         return {"status": "on_track"}
     if drift is None:
-        # Check if target date is in the past; if so, treat as behind schedule
-        goal = plan_view["goal"]
-        target = _parse_iso(goal.get("target_date"))
-        now = datetime.now(UTC)
-        if not target or target >= now:
+        # No drift signal: if the target date is still in the future, treat as on-track.
+        target = _parse_iso(plan_view["goal"].get("target_date"))
+        if not target or target >= datetime.now(UTC):
             return {"status": "on_track"}
     existing = conn.execute(
         "SELECT 1 FROM proposals WHERE status = 'pending' AND type = 'activate_plan' "
