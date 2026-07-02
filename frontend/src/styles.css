@@ -3561,16 +3561,87 @@ button,
 .coach-goal-row {
   display: flex;
   align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: inherit;
+}
+
+.coach-goal-select {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3);
-  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  padding: var(--sp-1) var(--sp-2);
+  border: 0;
   border-radius: var(--r-sm);
   background: transparent;
   color: inherit;
   cursor: pointer;
   text-align: start;
 }
+
+.coach-goal-select span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coach-goal-actions {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.coach-goal-edit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  padding: var(--sp-2);
+  border: 1px solid var(--accent-green, #34d399);
+  border-radius: var(--r-sm);
+}
+
+.coach-goal-edit-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-2);
+}
+
+.coach-goal-edit input,
+.coach-goal-edit select {
+  padding: var(--sp-2);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: inherit;
+}
+
+.coach-goal-edit-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.coach-goal-confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--accent-red, #f87171);
+  border-radius: var(--r-sm);
+}
+
+.coach-goal-confirm-actions {
+  display: flex;
+  gap: var(--sp-2);
+  flex: 0 0 auto;
+}
+
 .coach-goal-row.active {
   border-color: var(--accent-green, #34d399);
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, X } from "lucide-react";
+import { Check, Pencil, Trash2, X } from "lucide-react";
 
 import {
   type Accent,
@@ -12,12 +12,14 @@ import {
   type ReplanResult,
   acceptProposal,
   createGoal,
+  deleteGoal,
   dismissProposal,
   getGoalPlan,
   getGoals,
   getProposals,
   proposePlan,
-  replanGoal
+  replanGoal,
+  updateGoal
 } from "../api/atlas";
 import { Chip, Modal, ProgressBar } from "../shared/ui";
 import { driftChip, pickNextStep } from "./coach-logic";
@@ -53,6 +55,13 @@ export function CoachModal({
   const [title, setTitle] = useState("");
   const [moduleId, setModuleId] = useState("");
   const [targetDate, setTargetDate] = useState("");
+
+  // Edit / delete of an existing goal
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editModuleId, setEditModuleId] = useState("");
+  const [editTargetDate, setEditTargetDate] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   async function loadLists() {
     const [nextProposals, nextGoals] = await Promise.all([getProposals("pending"), getGoals()]);
@@ -139,6 +148,53 @@ export function CoachModal({
     }
   }
 
+  function startEdit(goal: Goal) {
+    setConfirmDeleteId(null);
+    setEditingId(goal.id);
+    setEditTitle(goal.title ?? "");
+    setEditModuleId(goal.module_id ?? "");
+    setEditTargetDate(goal.target_date ? goal.target_date.slice(0, 10) : "");
+  }
+
+  async function submitEdit(event: React.FormEvent, goalId: string) {
+    event.preventDefault();
+    if (!editTitle.trim()) {
+      return;
+    }
+    setBusy(true);
+    setNote(null);
+    try {
+      await updateGoal(goalId, {
+        title: editTitle.trim(),
+        module_id: editModuleId || undefined,
+        target_date: editTargetDate || undefined
+      });
+      setEditingId(null);
+      await refreshAll();
+    } catch {
+      setNote("לא הצלחתי לעדכן את המטרה.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doDelete(goalId: string) {
+    setBusy(true);
+    setNote(null);
+    try {
+      await deleteGoal(goalId);
+      setConfirmDeleteId(null);
+      if (selectedId === goalId) {
+        setSelectedId(null);
+      }
+      await refreshAll();
+    } catch {
+      setNote("לא הצלחתי למחוק את המטרה.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function doPropose() {
     if (!selectedId) {
       return;
@@ -184,6 +240,7 @@ export function CoachModal({
   const hasActivePlan = Boolean(plan && plan.plan.status === "active");
 
   const selectedGoal = goals.find((g) => g.id === selectedId) ?? null;
+  const visibleGoals = goals.filter((g) => g.status !== "abandoned");
 
   return (
     <Modal eyebrow="Chief of Staff" title="מרכז הפיקוד" size="wide" onClose={onClose}>
@@ -247,21 +304,63 @@ export function CoachModal({
           <section className="cc-card cc-goals">
             <header className="cc-card-head">
               <h3>מטרות</h3>
-              <span className="cc-count">{goals.length}</span>
+              <span className="cc-count">{visibleGoals.length}</span>
             </header>
             <div className="coach-goal-list">
-              {goals.map((goal) => (
-                <button
-                  key={goal.id}
-                  type="button"
-                  className={`coach-goal-row ${selectedId === goal.id ? "active" : ""}`}
-                  onClick={() => setSelectedId(goal.id)}
-                >
-                  <span dir="auto">{goal.title}</span>
-                  {goal.status ? <Chip accent={goal.status === "active" ? "green" : "neutral"}>{goal.status}</Chip> : null}
-                </button>
-              ))}
-              {goals.length === 0 ? <p className="empty-panel-copy">עדיין אין מטרות.</p> : null}
+              {visibleGoals.map((goal) =>
+                editingId === goal.id ? (
+                  <form key={goal.id} className="coach-goal-edit" onSubmit={(event) => submitEdit(event, goal.id)}>
+                    <input dir="auto" placeholder="כותרת" value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+                    <div className="coach-goal-edit-row">
+                      <select value={editModuleId} onChange={(e) => setEditModuleId(e.target.value)}>
+                        <option value="">ללא Module</option>
+                        {modules.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+                      <input type="date" value={editTargetDate} onChange={(e) => setEditTargetDate(e.target.value)} />
+                    </div>
+                    <div className="coach-goal-edit-actions">
+                      <button className="btn-primary tour-btn" type="submit" disabled={busy || !editTitle.trim()}>
+                        שמור
+                      </button>
+                      <button className="btn-ghost tour-btn" type="button" onClick={() => setEditingId(null)}>
+                        ביטול
+                      </button>
+                    </div>
+                  </form>
+                ) : confirmDeleteId === goal.id ? (
+                  <div key={goal.id} className="coach-goal-confirm">
+                    <span dir="auto">למחוק את "{goal.title}"?</span>
+                    <div className="coach-goal-confirm-actions">
+                      <button className="activity-action danger" type="button" disabled={busy} onClick={() => doDelete(goal.id)}>
+                        מחק
+                      </button>
+                      <button className="activity-action" type="button" onClick={() => setConfirmDeleteId(null)}>
+                        ביטול
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div key={goal.id} className={`coach-goal-row ${selectedId === goal.id ? "active" : ""}`}>
+                    <button type="button" className="coach-goal-select" onClick={() => setSelectedId(goal.id)}>
+                      <span dir="auto">{goal.title}</span>
+                      {goal.status ? <Chip accent={goal.status === "active" ? "green" : "neutral"}>{goal.status}</Chip> : null}
+                    </button>
+                    <div className="coach-goal-actions">
+                      <button className="icon-button small" type="button" aria-label="ערוך מטרה" onClick={() => startEdit(goal)}>
+                        <Pencil size={14} />
+                      </button>
+                      <button className="icon-button small" type="button" aria-label="מחק מטרה" onClick={() => setConfirmDeleteId(goal.id)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+                )
+              )}
+              {visibleGoals.length === 0 ? <p className="empty-panel-copy">עדיין אין מטרות.</p> : null}
             </div>
 
             <form className="coach-goal-form" onSubmit={submitGoal}>

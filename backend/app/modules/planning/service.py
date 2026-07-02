@@ -19,7 +19,7 @@ from app.core.time import utc_now_iso
 from app.modules.proposals.service import register_proposal_handler
 from app.shared.audit import record_audit_event
 from app.shared.schemas import GoalCreate
-from app.shared.sql import get_or_404
+from app.shared.sql import apply_update, get_or_404
 
 
 def create_goal(conn: Connection, payload: GoalCreate) -> dict:
@@ -45,6 +45,52 @@ def create_goal(conn: Connection, payload: GoalCreate) -> dict:
     record_audit_event(
         conn, entity_type="goal", entity_id=goal_id, action="created",
         summary=f"Goal created: {payload.title}", changes={"module_id": payload.module_id},
+    )
+    return goal
+
+
+GOAL_UPDATE_FIELDS = {
+    "title",
+    "module_id",
+    "discipline_id",
+    "definition_of_done",
+    "target_date",
+    "capacity_minutes_per_week",
+}
+
+
+def update_goal(conn: Connection, goal_id: str, payload: dict) -> dict:
+    """Edit a goal's fields. Validates a supplied module_id; audited."""
+    get_or_404(conn, "goals", goal_id)
+    if payload.get("module_id"):
+        get_or_404(conn, "life_modules", payload["module_id"])
+    goal = apply_update(conn, "goals", goal_id, payload, GOAL_UPDATE_FIELDS)
+    record_audit_event(
+        conn,
+        entity_type="goal",
+        entity_id=goal_id,
+        action="updated",
+        summary=f"Goal updated: {goal.get('title')}",
+        changes={key: value for key, value in payload.items() if key in GOAL_UPDATE_FIELDS and value is not None},
+    )
+    return goal
+
+
+def abandon_goal(conn: Connection, goal_id: str) -> dict:
+    """Soft-delete a goal (status='abandoned'). Plans/steps are kept as history."""
+    get_or_404(conn, "goals", goal_id)
+    conn.execute(
+        "UPDATE goals SET status = 'abandoned', updated_at = ? WHERE id = ?",
+        (utc_now_iso(), goal_id),
+    )
+    goal = get_or_404(conn, "goals", goal_id)
+    record_audit_event(
+        conn,
+        entity_type="goal",
+        entity_id=goal_id,
+        action="abandoned",
+        summary=f"Goal abandoned: {goal.get('title')}",
+        changes={"status": "abandoned"},
     )
     return goal
 
