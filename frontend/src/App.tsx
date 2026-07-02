@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ClipboardList, Compass, MessageCircle, Gauge, History, Plus, ShieldCheck, Sparkles } from "lucide-react";
-import { type AuditEvent, type ActivityTemplate, type ActivityTemplatePayload, type ActivityUpdatePayload, type CreateActivityPayload, type CommunicationMessage, type CommunicationProvider, type DashboardResponse, type Discipline, type JournalActivity, type LifeModule, type ModulePayload, type ModuleUpdatePayload, type QuickLogPayload, createCommunicationProvider, createActivityTemplate, archiveModule, pauseModule, resumeModule, createActivity, createModule, deleteActivity, updateActivity, getActivities, getActivityTemplates, getAuditEvents, getCommunicationMessages, getCommunicationProviders, getDashboard, getDisciplines, getModules, quickLog, sendCommunicationMessage, updateModule } from "./api/atlas";
+import { type AuditEvent, type ActivityTemplate, type ActivityTemplatePayload, type ActivityUpdatePayload, type CreateActivityPayload, type CommunicationMessage, type CommunicationProvider, type DashboardResponse, type Discipline, type JournalActivity, type LifeModule, type ModulePayload, type ModuleUpdatePayload, type QuickLogPayload, createCommunicationProvider, createActivityTemplate, archiveModule, pauseModule, resumeModule, createActivity, createModule, deleteActivity, updateActivity, getActivities, getActivityTemplates, getAuditEvents, getCommunicationMessages, getCommunicationProviders, getDashboard, getDisciplines, getModules, linkActivityToStep, quickLog, sendCommunicationMessage, updateModule } from "./api/atlas";
 import { ApiUnavailablePanel, NewsTile, QuoteStrip } from "./features/widgets";
 import { JournalView } from "./features/journal";
 import { ModulesView } from "./features/modules";
@@ -108,11 +108,14 @@ export function App() {
     };
   }, []);
 
-  async function handleQuickLog(payload: QuickLogPayload) {
+  async function handleQuickLog(payload: QuickLogPayload, stepId?: string) {
     setIsLogging(true);
     setError(null);
     try {
-      await quickLog(payload);
+      const activity = await quickLog(payload);
+      if (stepId) {
+        await linkActivityToStep(stepId, activity.id);
+      }
       await refreshDashboard();
       setIsQuickLogOpen(false);
     } catch {
