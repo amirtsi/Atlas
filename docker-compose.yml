@@ -1,23 +1,47 @@
+# Atlas app stack — backend API + web UI. Raspberry Pi ready (arm64 + amd64).
+#
+#   docker compose up -d --build
+#   → web UI on http://<host>:${ATLAS_WEB_PORT:-8080}, API on :${ATLAS_API_PORT:-8000}
+#
+# The WhatsApp bridge (Evolution) is a separate stack in this same folder:
+#   docker compose -f docker-compose.evolution.yml --env-file .env.evolution up -d
+# (on Linux/Raspberry Pi add: -f docker-compose.evolution.pi.yml — see docs/deploy-pi.md)
+#
+# `name:` keeps this project separate from the Evolution stack so neither
+# `docker compose up/down` treats the other's containers as orphans.
+name: atlas-app
+
 services:
   atlas-backend:
     build:
       context: ./backend
+    container_name: atlas-backend
+    restart: unless-stopped
     environment:
       ATLAS_ENV: production
       ATLAS_DATABASE_PATH: /data/atlas.sqlite
-      ATLAS_CORS_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
+      ATLAS_TIMEZONE: ${ATLAS_TIMEZONE:-Asia/Jerusalem}
+      # Optional: enables LLM plan decomposition / coach / classifier. Leave empty
+      # for the honest 422 fallbacks. Set it in the shell or a root .env file.
+      ATLAS_ANTHROPIC_API_KEY: ${ATLAS_ANTHROPIC_API_KEY:-}
     volumes:
-      - atlas_data:/data
+      # Bind mount (not a named volume) so the SQLite ledger is a visible file:
+      # back it up with `cp`, or migrate from the Mac with `scp` into ./data.
+      - ${ATLAS_DATA_DIR:-./data}:/data
     ports:
-      - "8000:8000"
+      - "${ATLAS_API_PORT:-8000}:8000"
+    extra_hosts:
+      # Lets the backend reach services on the host (the Evolution bridge at
+      # host.docker.internal:8083). Built into Docker Desktop; on Linux/Pi this
+      # mapping is required.
+      - "host.docker.internal:host-gateway"
 
   atlas-frontend:
     build:
       context: ./frontend
+    container_name: atlas-web
+    restart: unless-stopped
     depends_on:
       - atlas-backend
     ports:
-      - "8080:80"
-
-volumes:
-  atlas_data:
+      - "${ATLAS_WEB_PORT:-8080}:80"
