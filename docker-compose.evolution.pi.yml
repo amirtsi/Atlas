@@ -1,0 +1,12 @@
+# Linux / Raspberry Pi overlay for the Evolution (WhatsApp) stack.
+#
+# On macOS Docker Desktop, containers resolve host.docker.internal natively, so
+# the Evolution -> Atlas webhook URL just works. On Linux the name must be
+# mapped explicitly to the host gateway. Apply this file ON TOP of the base:
+#
+#   docker compose -f docker-compose.evolution.yml -f docker-compose.evolution.pi.yml \
+#     --env-file .env.evolution up -d
+services:
+  evolution-api:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
