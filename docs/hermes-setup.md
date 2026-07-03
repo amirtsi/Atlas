@@ -76,6 +76,31 @@ the backend directory as `cwd`:
 Point `ATLAS_DATABASE_PATH` at the **same** database the Atlas API uses, so Hermes reads
 your real state and its proposals show up in the running cockpit.
 
+### Atlas on the Raspberry Pi (current deployment)
+
+When Atlas runs on the Pi (see `docs/deploy-pi.md`), don't point the client at a local
+venv/DB copy — run the MCP server **inside the Pi's backend container**, over SSH-wrapped
+stdio. The backend image bakes in the `[mcp]` extra, and the container already carries
+`ATLAS_DATABASE_PATH` and `ATLAS_ANTHROPIC_API_KEY`, so no `env` block is needed:
+
+```json
+{
+  "mcpServers": {
+    "atlas": {
+      "command": "ssh",
+      "args": ["-o", "BatchMode=yes", "amir@atlas.local",
+               "docker", "exec", "-i", "atlas-backend",
+               "python", "-m", "app.mcp_server"]
+    }
+  }
+}
+```
+
+Prerequisite: passwordless SSH to the Pi (`ssh-copy-id amir@atlas.local`). Verify the
+transport with a raw JSON-RPC handshake, or simply `claude mcp add atlas -- ssh -o
+BatchMode=yes amir@atlas.local docker exec -i atlas-backend python -m app.mcp_server`
+and check `claude mcp list` reports it Connected.
+
 ## Step 3 — give Hermes its operating brief
 
 Tell Hermes (in its own system/config prompt) the rules of engagement. Suggested brief:
