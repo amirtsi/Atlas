@@ -6,8 +6,10 @@ COPY pyproject.toml README.md ./
 COPY app ./app
 
 # tzdata backs zoneinfo (the Asia/Jerusalem daily-brief scheduler) on slim images.
+# The [mcp] extra bakes in the Hermes seam so `python -m app.mcp_server` works
+# inside the container (spawned over `docker exec` by an external MCP client).
 RUN python -m pip install --no-cache-dir --upgrade pip \
-  && python -m pip install --no-cache-dir . tzdata
+  && python -m pip install --no-cache-dir ".[mcp]" tzdata
 
 EXPOSE 8000
 
