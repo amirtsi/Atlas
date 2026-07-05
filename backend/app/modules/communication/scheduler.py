@@ -10,7 +10,7 @@ no fabricated content. Idempotent: at most one brief per provider per UTC day.
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from app.core.config import get_settings
@@ -120,17 +120,24 @@ async def run_daily_brief_scheduler() -> None:
 
 
 async def run_outbox_dispatcher() -> None:
-    """Long-lived heartbeat for the coach outbox: drain the queue every 60s.
-
-    All policy (quiet hours, caps, retry) lives in outbox.dispatch_pending —
-    this loop only provides the tick. Sleeps before the first tick so app
-    startup (and tests) never race an immediate dispatch."""
+    """Long-lived heartbeat for the coach outbox: drain the queue every 60s and
+    run the nudge pass hourly. All send policy lives in outbox.dispatch_pending;
+    quiet-hours skipping for nudges lives in nudges.run_nudge_pass. Sleeps
+    before the first tick so app startup (and tests) never race a dispatch."""
+    from app.modules.communication.nudges import run_nudge_pass
     from app.modules.communication.outbox import run_dispatch_tick
 
-    logger.info("Outbox dispatcher active — 60s tick.")
+    logger.info("Outbox dispatcher active — 60s tick, hourly nudge pass.")
+    last_nudge_pass: datetime | None = None
     while True:
         try:
             await asyncio.sleep(60)
+            now = datetime.now(UTC)
+            if last_nudge_pass is None or now - last_nudge_pass >= timedelta(hours=1):
+                queued = await asyncio.to_thread(run_nudge_pass)
+                if queued:
+                    logger.info("Nudge pass queued %d nudge(s).", len(queued))
+                last_nudge_pass = now
             results = await asyncio.to_thread(run_dispatch_tick)
             if results:
                 logger.info("Outbox dispatch: %s", results)
@@ -138,4 +145,4 @@ async def run_outbox_dispatcher() -> None:
             logger.info("Outbox dispatcher stopped.")
             break
         except Exception:  # never let a transient error kill the loop
-            logger.exception("Outbox dispatch tick failed; retrying next tick.")
+            logger.exception("Outbox tick failed; retrying next tick.")
