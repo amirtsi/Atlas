@@ -175,6 +175,23 @@ CREATE TABLE IF NOT EXISTS proposals (
 
 CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status);
 
+CREATE TABLE IF NOT EXISTS outbox (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('proposal', 'coach_message', 'nudge')),
+  body TEXT NOT NULL,
+  ref_type TEXT,
+  ref_id TEXT,
+  status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'sent', 'failed')),
+  created_by TEXT NOT NULL DEFAULT 'atlas',
+  created_at TEXT NOT NULL,
+  sent_at TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  next_attempt_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_outbox_status ON outbox(status);
+
 CREATE TABLE IF NOT EXISTS goals (
   id TEXT PRIMARY KEY,
   module_id TEXT REFERENCES life_modules(id),

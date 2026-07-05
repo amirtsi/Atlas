@@ -38,6 +38,14 @@ class Settings(BaseSettings):
     daily_brief_enabled: bool = True
     daily_brief_hour: int = 8
     daily_brief_minute: int = 0
+    # Coach communication over the WhatsApp bridge (the outbox). Producers only
+    # enqueue; the dispatcher enforces quiet hours (local time) and per-kind
+    # daily caps (counted per UTC day, like the daily-brief idempotency guard).
+    quiet_hours_start: int = 22
+    quiet_hours_end: int = 8
+    coach_message_daily_cap: int = 5
+    nudge_daily_cap: int = 3
+    nudge_inactivity_days: int = 4
     # Obsidian projection. Path to the vault root (a Syncthing-synced copy on the
     # Pi, or the local vault on a Mac). Empty => feature off. Atlas writes ONLY
     # inside an `Atlas/` subfolder it owns; notes are derived full rewrites.
