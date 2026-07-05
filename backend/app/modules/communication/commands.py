@@ -19,19 +19,32 @@ from app.modules.proposals.service import accept_proposal, dismiss_proposal
 
 _ACCEPT = r"accept|approve|yes|ok|אשר|קבל|כן"
 _DISMISS = r"dismiss|reject|no|דחה|לא"
-_COMMAND_RE = re.compile(
-    rf"^(?:(?P<accept>{_ACCEPT})|(?P<dismiss>{_DISMISS}))\s*#?(?P<ref>[0-9a-fA-F-]{{4,36}})?$",
+
+# Accept requires an explicit ref — a bare accept verb ("ok", "yes", "כן") is NOT
+# a command and returns None so it falls through to the coach/classifier flow.
+# (re.IGNORECASE only affects the ASCII verbs; Hebrew chars are case-invariant.)
+_ACCEPT_RE = re.compile(
+    rf"^(?:{_ACCEPT})(?:\s+|\s*#)(?P<ref>[0-9a-fA-F-]{{4,36}})$",
+    re.IGNORECASE,
+)
+# Dismiss works with or without a ref (bare dismiss acts on single pending / lists
+# when multiple / honest reply when none).
+_DISMISS_RE = re.compile(
+    rf"^(?:{_DISMISS})(?:(?:\s+|\s*#)(?P<ref>[0-9a-fA-F-]{{4,36}}))?$",
     re.IGNORECASE,
 )
 
 
 def parse_proposal_command(text: str | None) -> dict | None:
-    match = _COMMAND_RE.match((text or "").strip())
-    if not match:
-        return None
-    action = "accept" if match.group("accept") else "dismiss"
-    ref = match.group("ref")
-    return {"action": action, "ref": ref.lower() if ref else None}
+    stripped = (text or "").strip()
+    m = _ACCEPT_RE.match(stripped)
+    if m:
+        return {"action": "accept", "ref": m.group("ref").lower()}
+    m = _DISMISS_RE.match(stripped)
+    if m:
+        ref = m.group("ref")
+        return {"action": "dismiss", "ref": ref.lower() if ref else None}
+    return None
 
 
 def _pending(conn: Connection) -> list[dict]:
@@ -48,6 +61,14 @@ def _pending_list_reply(pending: list[dict]) -> str:
 
 
 def execute_proposal_command(conn: Connection, command: dict) -> str:
+    # Defensive guard: accept without a ref is unreachable via the parser, but if
+    # called directly we return the pending list rather than acting blindly.
+    if command["action"] == "accept" and command.get("ref") is None:
+        pending = _pending(conn)
+        if not pending:
+            return "✅ אין הצעות ממתינות. (No pending proposals.)"
+        return _pending_list_reply(pending)
+
     pending = _pending(conn)
     ref = command["ref"]
     if ref:

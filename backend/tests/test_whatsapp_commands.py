@@ -14,10 +14,15 @@ class ParseCommandTest(unittest.TestCase):
         for text in ("dismiss a1b2c3", "reject a1b2c3", "דחה a1b2c3"):
             self.assertEqual(parse_proposal_command(text), {"action": "dismiss", "ref": "a1b2c3"}, text)
 
-    def test_bare_verbs_have_no_ref(self) -> None:
-        self.assertEqual(parse_proposal_command("accept"), {"action": "accept", "ref": None})
-        self.assertEqual(parse_proposal_command("כן"), {"action": "accept", "ref": None})
-        self.assertEqual(parse_proposal_command("לא"), {"action": "dismiss", "ref": None})
+    def test_bare_accept_verbs_return_none(self) -> None:
+        # Bare accept is NOT a command — falls through to the classifier flow.
+        for text in ("accept", "כן", "ok", "yes"):
+            self.assertIsNone(parse_proposal_command(text), repr(text))
+
+    def test_bare_dismiss_verbs_have_no_ref(self) -> None:
+        # Bare dismiss is a command and acts on single pending / lists when multiple.
+        for text in ("no", "לא", "dismiss"):
+            self.assertEqual(parse_proposal_command(text), {"action": "dismiss", "ref": None}, text)
 
     def test_anchoring_rejects_ordinary_messages(self) -> None:
         for text in (
@@ -25,6 +30,8 @@ class ParseCommandTest(unittest.TestCase):
             "I accept a1b2c3",                  # leading words
             "עשיתי פיזיותרפיה 30 דקות",          # normal activity log
             "accept 12",                        # ref too short (uuids, not ints)
+            "nodead",                           # verb directly glued to hex — not a command
+            "accepta1b2c3",                     # no separator between verb and ref
             "", None,
         ):
             self.assertIsNone(parse_proposal_command(text), repr(text))
@@ -65,7 +72,7 @@ class ExecuteCommandTest(unittest.TestCase):
             first = self._pending_proposal(client)
             second = self._pending_proposal(client)
             with db_connection() as conn:
-                reply = execute_proposal_command(conn, {"action": "accept", "ref": None})
+                reply = execute_proposal_command(conn, {"action": "dismiss", "ref": None})
                 pending = conn.execute("SELECT COUNT(*) FROM proposals WHERE status = 'pending'").fetchone()[0]
             self.assertIn(first["id"][:6], reply)
             self.assertIn(second["id"][:6], reply)

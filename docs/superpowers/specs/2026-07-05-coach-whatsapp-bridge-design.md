@@ -124,22 +124,29 @@ Reply: accept <id> / dismiss <id> (אשר <id> / דחה <id>)
 **Inbound.** A command parser runs at the **front** of
 `_handle_owner_message` (`communication/router.py`), before the coach-question
 and activity-classifier branches. Grammar (anchored, whole-message match after
-trim; case-insensitive; optional `#`):
+trim; case-insensitive; `#` or whitespace separator between verb and ref):
 
-- Accept: `^(accept|approve|yes|ok|אשר|קבל|כן)\s*#?(\d+)?$`
-- Dismiss: `^(dismiss|reject|no|דחה|לא)\s*#?(\d+)?$`
+- Accept: `^(accept|approve|yes|ok|אשר|קבל|כן)(\s+|\s*#)(<ref>)$` — **ref required**
+- Dismiss: `^(dismiss|reject|no|דחה|לא)((\s+|\s*#)(<ref>))?$` — ref optional
 
 Anchoring is deliberate: a normal log message like "accept the offer from Dana"
-must NOT match and must fall through to the classifier.
+must NOT match and must fall through to the classifier. A verb directly glued to
+hex chars (e.g. "nodead", "accepta1b2c3") is also not a command.
 
-Resolution:
+Resolution (post-review tightening, owner-approved 2026-07-05):
 
-- Id given → call `accept_proposal`/`dismiss_proposal` (same services and audit
-  as the dashboard). Not-pending/not-found → honest error reply (409/404 text).
-- No id + exactly one pending proposal → act on it.
-- No id + multiple pending → reply listing pending proposals (id + title), act
-  on nothing.
-- No id + none pending → "no pending proposals" reply.
+- **Accept always requires an explicit ref.** A bare accept verb ("ok", "yes",
+  "כן" with no id) is **not** a command — `parse_proposal_command` returns `None`
+  and the message falls through to the classifier. This prevents a conversational
+  "ok"/"כן" from accidentally applying a proposal.
+- Accept with ref → call `accept_proposal` (same service and audit as the
+  dashboard). Not-pending/not-found → honest error reply.
+- **Dismiss works with or without a ref.**
+  - No id + exactly one pending proposal → act on it.
+  - No id + multiple pending → reply listing pending proposals (id + title), act
+    on nothing.
+  - No id + none pending → "no pending proposals" reply.
+  - Id given → call `dismiss_proposal`.
 
 Confirmation replies start with ✅ so the existing webhook loop-guards
 (`_looks_like_atlas_reply`, `_matches_recent_outbound`) skip them unchanged.

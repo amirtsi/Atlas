@@ -1,8 +1,9 @@
 """Verify the Atlas MCP server is ready to receive an external agent (P4b).
 
 Drives `python -m app.mcp_server` over REAL stdio exactly as Hermes will: performs
-the MCP handshake, checks the exact 11-tool surface, calls a read tool and a
-propose-only write tool, and confirms the proposal lands in the pending inbox.
+the MCP handshake, checks the exact 11-tool surface, calls a read tool, a
+propose-only write tool, and the rate-limited notify tool, and confirms the
+proposal lands in the pending inbox.
 
 Runs entirely against a throwaway TEMP database — it never touches your real Atlas
 data. Prints "MCP READY" and exits 0 on success; prints the failure and exits 1

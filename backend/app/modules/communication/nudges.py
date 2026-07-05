@@ -10,6 +10,7 @@ about the same thing; the dispatcher's daily nudge cap does the rest.
 """
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
 from sqlite3 import Connection
 from zoneinfo import ZoneInfo
@@ -18,6 +19,8 @@ from app.core.config import get_settings
 from app.core.database import db_connection, rows_to_dicts
 from app.modules.communication.outbox import enqueue, in_quiet_hours
 from app.modules.planning.service import get_goal_plan
+
+logger = logging.getLogger("atlas.nudges")
 
 COOLDOWN_HOURS = 48
 
@@ -45,19 +48,23 @@ def generate_nudges(conn: Connection) -> list[dict]:
         ).fetchall()
     )
     for goal in goals:
-        view = get_goal_plan(conn, goal["id"]) or {}
-        drift = view.get("drift")
-        if drift is None or drift["on_track"]:
-            continue
-        if _recently_nudged(conn, "goal", goal["id"]):
-            continue
-        body = (
-            f"📉 Goal '{goal['title']}' is behind plan: "
-            f"{int(drift['actual_percent'] * 100)}% done vs "
-            f"{int(drift['expected_percent'] * 100)}% expected. "
-            "Reply or open Atlas to re-plan."
-        )
-        created.append(enqueue(conn, kind="nudge", body=body, ref_type="goal", ref_id=goal["id"]))
+        try:
+            # Check cooldown before querying the plan (skip expensive call if not needed).
+            if _recently_nudged(conn, "goal", goal["id"]):
+                continue
+            view = get_goal_plan(conn, goal["id"]) or {}
+            drift = view.get("drift")
+            if drift is None or drift["on_track"]:
+                continue
+            body = (
+                f"📉 Goal '{goal['title']}' is behind plan: "
+                f"{int(drift['actual_percent'] * 100)}% done vs "
+                f"{int(drift['expected_percent'] * 100)}% expected. "
+                "Reply or open Atlas to re-plan."
+            )
+            created.append(enqueue(conn, kind="nudge", body=body, ref_type="goal", ref_id=goal["id"]))
+        except Exception:
+            logger.warning("Nudge: skipping goal %s due to error.", goal.get("id"), exc_info=True)
 
     days = get_settings().nudge_inactivity_days
     cutoff = (datetime.now(UTC) - timedelta(days=days)).replace(microsecond=0).isoformat()

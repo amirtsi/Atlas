@@ -156,21 +156,52 @@ def dispatch_pending(conn: Connection, *, now_local: datetime | None = None) -> 
     )
     results: list[dict] = []
     for row in rows:
-        cap = _daily_cap(row["kind"])
-        if cap is not None and _sent_today(conn, row["kind"]) >= cap:
-            results.append({"outbox_id": row["id"], "status": "held_daily_cap"})
-            continue
-        message_id = _send_and_store_reply(conn, provider, recipient, row["body"])
-        message = conn.execute(
-            "SELECT status, error FROM communication_messages WHERE id = ?", (message_id,)
-        ).fetchone()
-        if message["status"] == "failed":
+        try:
+            cap = _daily_cap(row["kind"])
+            if cap is not None and _sent_today(conn, row["kind"]) >= cap:
+                results.append({"outbox_id": row["id"], "status": "held_daily_cap"})
+                continue
+            message_id = _send_and_store_reply(conn, provider, recipient, row["body"])
+            message = conn.execute(
+                "SELECT status, error FROM communication_messages WHERE id = ?", (message_id,)
+            ).fetchone()
+            if message["status"] == "failed":
+                attempts = row["attempts"] + 1
+                if attempts >= MAX_ATTEMPTS:
+                    conn.execute(
+                        "UPDATE outbox SET status = 'failed', attempts = ?, last_error = ? WHERE id = ?",
+                        (attempts, message["error"], row["id"]),
+                    )
+                    conn.commit()
+                    results.append({"outbox_id": row["id"], "status": "failed"})
+                else:
+                    next_attempt = (
+                        (datetime.now(UTC) + timedelta(minutes=2**attempts))
+                        .replace(microsecond=0)
+                        .isoformat()
+                    )
+                    conn.execute(
+                        "UPDATE outbox SET attempts = ?, last_error = ?, next_attempt_at = ? WHERE id = ?",
+                        (attempts, message["error"], next_attempt, row["id"]),
+                    )
+                    conn.commit()
+                    results.append({"outbox_id": row["id"], "status": "retry_scheduled"})
+            else:
+                conn.execute(
+                    "UPDATE outbox SET status = 'sent', sent_at = ? WHERE id = ?",
+                    (utc_now_iso(), row["id"]),
+                )
+                conn.commit()
+                results.append({"outbox_id": row["id"], "status": "sent", "message_id": message_id})
+        except Exception:
+            logger.exception("Outbox: error processing row %s; treating as send failure.", row["id"])
             attempts = row["attempts"] + 1
             if attempts >= MAX_ATTEMPTS:
                 conn.execute(
                     "UPDATE outbox SET status = 'failed', attempts = ?, last_error = ? WHERE id = ?",
-                    (attempts, message["error"], row["id"]),
+                    (attempts, "exception during dispatch (see logs)", row["id"]),
                 )
+                conn.commit()
                 results.append({"outbox_id": row["id"], "status": "failed"})
             else:
                 next_attempt = (
@@ -180,15 +211,10 @@ def dispatch_pending(conn: Connection, *, now_local: datetime | None = None) -> 
                 )
                 conn.execute(
                     "UPDATE outbox SET attempts = ?, last_error = ?, next_attempt_at = ? WHERE id = ?",
-                    (attempts, message["error"], next_attempt, row["id"]),
+                    (attempts, "exception during dispatch (see logs)", next_attempt, row["id"]),
                 )
+                conn.commit()
                 results.append({"outbox_id": row["id"], "status": "retry_scheduled"})
-        else:
-            conn.execute(
-                "UPDATE outbox SET status = 'sent', sent_at = ? WHERE id = ?",
-                (utc_now_iso(), row["id"]),
-            )
-            results.append({"outbox_id": row["id"], "status": "sent", "message_id": message_id})
     return results
 
 

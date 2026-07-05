@@ -134,9 +134,14 @@ async def run_outbox_dispatcher() -> None:
             await asyncio.sleep(60)
             now = datetime.now(UTC)
             if last_nudge_pass is None or now - last_nudge_pass >= timedelta(hours=1):
-                queued = await asyncio.to_thread(run_nudge_pass)
-                if queued:
-                    logger.info("Nudge pass queued %d nudge(s).", len(queued))
+                try:
+                    queued = await asyncio.to_thread(run_nudge_pass)
+                    if queued:
+                        logger.info("Nudge pass queued %d nudge(s).", len(queued))
+                except Exception:
+                    logger.exception("Nudge pass failed; will retry next hour.")
+                # Advance last_nudge_pass regardless: a failing pass retries next
+                # hour, not every 60 s, so it does not starve the dispatch tick.
                 last_nudge_pass = now
             results = await asyncio.to_thread(run_dispatch_tick)
             if results:
