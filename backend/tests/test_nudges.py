@@ -42,7 +42,7 @@ class NudgeTest(unittest.TestCase):
         with TestClient(app):
             with db_connection() as conn:
                 behind_id = _insert_active_goal(conn, "OSCP cert")
-                on_track_id = _insert_active_goal(conn, "ParkNet v2")
+                _insert_active_goal(conn, "ParkNet v2")  # on-track goal — must NOT get a nudge
 
                 def fake_plan(conn_, goal_id):
                     return BEHIND if goal_id == behind_id else ON_TRACK
