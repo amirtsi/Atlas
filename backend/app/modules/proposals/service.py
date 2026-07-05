@@ -78,6 +78,13 @@ def create_proposal(
         summary=f"Proposal created: {title}",
         changes={"type": type, "created_by": created_by},
     )
+    # Active coach plane: ping the owner over the WhatsApp bridge. Only an
+    # outbox row is written here — the dispatcher enforces quiet hours/caps.
+    # Lazy import (like planning/service.py and communication/scheduler.py)
+    # so proposals never depends on communication at module level.
+    from app.modules.communication.outbox import enqueue_proposal_ping
+
+    enqueue_proposal_ping(conn, proposal)
     return proposal
 
 

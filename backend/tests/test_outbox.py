@@ -73,3 +73,40 @@ class QuietHoursTest(unittest.TestCase):
         self.assertTrue(outbox.in_quiet_hours(datetime(2026, 7, 5, 12, 0, tzinfo=TZ), 9, 17))
         self.assertFalse(outbox.in_quiet_hours(datetime(2026, 7, 5, 20, 0, tzinfo=TZ), 9, 17))
         self.assertFalse(outbox.in_quiet_hours(datetime(2026, 7, 5, 12, 0, tzinfo=TZ), 8, 8))
+
+
+class ProposalPingHookTest(unittest.TestCase):
+    def _module_id(self, client) -> str:
+        return client.get("/api/v1/modules").json()[0]["id"]
+
+    def _pings(self, conn) -> list:
+        return conn.execute(
+            "SELECT * FROM outbox WHERE kind = 'proposal' ORDER BY created_at"
+        ).fetchall()
+
+    def test_create_proposal_enqueues_exactly_one_ping(self) -> None:
+        from app.modules.proposals.service import create_proposal
+
+        with TestClient(app) as client:
+            module_id = self._module_id(client)
+            with db_connection() as conn:
+                proposal = create_proposal(
+                    conn, "set_module_status", "Archive?", "stale",
+                    {"module_id": module_id, "status": "archived"},
+                )
+                pings = self._pings(conn)
+            self.assertEqual(len(pings), 1)
+            self.assertEqual(pings[0]["ref_id"], proposal["id"])
+            self.assertEqual(pings[0]["created_by"], "system")
+
+    def test_mcp_propose_ping_attributed_to_hermes(self) -> None:
+        from app import mcp_server
+
+        with TestClient(app) as client:
+            module_id = self._module_id(client)
+            proposal = mcp_server.propose_module_status(module_id, "paused", "coach says pause")
+            self.assertEqual(proposal["status"], "pending")
+            with db_connection() as conn:
+                pings = self._pings(conn)
+            self.assertEqual(len(pings), 1)
+            self.assertEqual(pings[0]["created_by"], "hermes")
