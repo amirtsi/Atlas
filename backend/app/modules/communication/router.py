@@ -6,6 +6,7 @@ from app.core.time import utc_now_iso
 from app.modules.activity_ledger.service import insert_activity
 from app.modules.coach.service import answer_question
 from app.modules.communication.classifier import classify_message
+from app.modules.communication.commands import execute_proposal_command, parse_proposal_command
 from app.modules.communication.evolution import (
     get_connection_state,
     normalize_webhook_payload,
@@ -284,6 +285,43 @@ def _handle_owner_message(conn, provider: dict, inbound_message_id: str | None, 
     """Answer owner questions from real data; otherwise classify + log when confident."""
     text = normalized["content_text"]
     settings = get_settings()
+
+    # Proposal reply commands ("accept a1b2c3" / "אשר a1b2c3") come first: an
+    # anchored whole-message match, so ordinary logs fall through untouched.
+    command = parse_proposal_command(text)
+    if command:
+        reply_text = execute_proposal_command(conn, command)
+        reply_message_id = _send_and_store_reply(conn, provider, sender, reply_text, in_reply_to=inbound_message_id)
+        if inbound_message_id:
+            conn.execute(
+                "UPDATE communication_messages SET metadata = ?, updated_at = ? WHERE id = ?",
+                (
+                    json_dump(
+                        {
+                            "raw_event_type": normalized["event_type"],
+                            "intent": "proposal_command",
+                            "command": command,
+                        }
+                    ),
+                    now,
+                    inbound_message_id,
+                ),
+            )
+        return {
+            "matched": False,
+            "module_id": None,
+            "module_name": None,
+            "discipline_id": None,
+            "activity_type": None,
+            "title": None,
+            "duration_minutes": None,
+            "confidence": 0.0,
+            "method": "proposal_command",
+            "intent": "proposal_command",
+            "reply_text": reply_text,
+            "activity_id": None,
+            "reply_message_id": reply_message_id,
+        }
 
     if settings.coach_enabled and classify_intent(text) == "question":
         coach = answer_question(text)
