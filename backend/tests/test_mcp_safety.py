@@ -14,6 +14,7 @@ ALLOWED = {
     "propose_module_priority",
     "propose_plan",
     "request_replan",
+    "message_owner",
 }
 FORBIDDEN_SUBSTRINGS = ("accept", "dismiss", "delete", "apply", "sql", "drop", "truncate", "remove")
 

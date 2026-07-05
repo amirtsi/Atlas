@@ -1,7 +1,7 @@
 """Verify the Atlas MCP server is ready to receive an external agent (P4b).
 
 Drives `python -m app.mcp_server` over REAL stdio exactly as Hermes will: performs
-the MCP handshake, checks the exact 10-tool surface, calls a read tool and a
+the MCP handshake, checks the exact 11-tool surface, calls a read tool and a
 propose-only write tool, and confirms the proposal lands in the pending inbox.
 
 Runs entirely against a throwaway TEMP database — it never touches your real Atlas
@@ -33,6 +33,7 @@ EXPECTED_TOOLS = {
     "propose_module_priority",
     "propose_plan",
     "request_replan",
+    "message_owner",
 }
 
 
@@ -88,6 +89,10 @@ async def _run(env: dict) -> None:
             pending = _payload(await session.call_tool("list_proposals", {}))
             assert any(p["id"] == proposal["id"] for p in pending), "proposal missing from inbox"
             print("  inbox OK; proposal visible in the pending inbox")
+
+            note = _payload(await session.call_tool("message_owner", {"text": "readiness check"}))
+            assert note.get("status") == "queued", "message_owner did not queue"
+            print("  notify OK; message_owner queued (app-side dispatcher sends it)")
 
 
 def main() -> int:

@@ -1,9 +1,11 @@
-"""Atlas MCP server (P4a).
+"""Atlas MCP server (P4a + coach bridge).
 
-A stdio MCP server exposing Atlas as a READ + PROPOSE-ONLY surface for an
+A stdio MCP server exposing Atlas as a READ + PROPOSE + NOTIFY surface for an
 external agent (e.g. Hermes). It reuses Atlas's own db_connection() and service
-layer in-process. It can read real state and create PENDING proposals, but by
-design exposes no accept/dismiss/apply/delete/raw-SQL tool — nothing changes
+layer in-process. It can read real state, create PENDING proposals, and queue
+rate-limited messages to the owner (message_owner -> outbox; the app-side
+dispatcher sends them, enforcing quiet hours and a daily cap). By design it
+exposes no accept/dismiss/apply/delete/raw-SQL tool — nothing changes
 fact-plane state without the owner accepting a proposal in the inbox.
 
 Run: python -m app.mcp_server   (stdio transport)
@@ -12,10 +14,15 @@ NOTE: app.main must never import this module, so the core app stays importable
 without the optional `mcp` dependency.
 """
 
+from datetime import date, timedelta
+
 from fastapi import HTTPException
 from mcp.server.fastmcp import FastMCP
 
+from app.core.config import get_settings
 from app.core.database import db_connection, rows_to_dicts
+from app.core.time import utc_now_iso
+from app.modules.communication.outbox import coach_quota_remaining, enqueue
 from app.modules.dashboard.service import get_today_dashboard as _get_today_dashboard
 from app.modules.planning.service import generate_replan_proposal as _generate_replan_proposal
 from app.modules.planning.service import get_goal_plan as _get_goal_plan
@@ -146,6 +153,23 @@ def request_replan(goal_id: str) -> dict:
     return result if result is not None else {"status": "on_track"}
 
 
+def message_owner(text: str) -> dict:
+    """Queue a short WhatsApp message to the owner (rate-limited; never sends
+    directly — Atlas's dispatcher sends it, enforcing quiet hours + daily cap)."""
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return {"error": "text must not be empty", "status_code": 422}
+    if len(cleaned) > 1000:
+        return {"error": "text too long (max 1000 characters)", "status_code": 422}
+    with db_connection() as conn:
+        remaining = coach_quota_remaining(conn, "coach_message")
+        if remaining <= 0:
+            resets = f"{date.fromisoformat(utc_now_iso()[:10]) + timedelta(days=1)}T00:00:00+00:00"
+            return {"error": "quota_exhausted", "cap": get_settings().coach_message_daily_cap, "resets": resets}
+        row = enqueue(conn, kind="coach_message", body=cleaned, created_by="hermes")
+    return {"status": "queued", "outbox_id": row["id"], "quota_remaining_today": remaining - 1}
+
+
 READ_TOOLS = [
     atlas_snapshot,
     list_modules,
@@ -163,6 +187,7 @@ WRITE_TOOLS = [
     propose_module_priority,
     propose_plan,
     request_replan,
+    message_owner,
 ]
 
 for _tool in WRITE_TOOLS:
