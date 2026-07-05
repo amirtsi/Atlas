@@ -50,3 +50,6 @@ applies until you accept): `propose_module_status`, `propose_module_priority`,
 `propose_plan`, `request_replan`. Plan/re-plan proposals are also tagged
 `created_by="hermes"` (the planning service takes a `created_by` passthrough); the
 `/planning/**` REST endpoints still default to `created_by="system"`.
+
+Message dispatch: `message_owner(text)` — queue a rate-limited WhatsApp message to the
+owner (Atlas's dispatcher sends it; quiet hours + 5/day cap; never sends directly).

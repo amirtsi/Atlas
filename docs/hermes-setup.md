@@ -28,6 +28,11 @@ Hermes (own process, cron, memory)         Atlas
 - Hermes runs its own WhatsApp bridge that **conflicts** with Atlas's Evolution number — do
   not point both at the same number. Use a separate channel for Hermes (Telegram is the
   recommended additive channel; keep the Evolution/WhatsApp line as Atlas's quick-log).
+- Hermes can also **message you directly** through Atlas's own WhatsApp line via the
+  `message_owner` tool: messages queue in Atlas's outbox and Atlas sends them
+  (quiet hours 22:00–08:00 local, max 5/day, honest quota errors). This is the
+  sanctioned direct channel — Hermes's own WhatsApp bridge still must not be
+  pointed at the Evolution number.
 
 ## Prerequisites
 
@@ -111,8 +116,11 @@ Tell Hermes (in its own system/config prompt) the rules of engagement. Suggested
 > `propose_module_status` / `propose_module_priority` for module focus,
 > `propose_plan` for a goal that has no plan, `request_replan` when a goal's plan is
 > behind. Never invent progress — it comes only from logged activities. Do not create a
-> duplicate proposal if one is already pending for the same goal/module. Everything you
-> propose waits for the owner's approval in the inbox.
+> duplicate proposal if one is already pending for the same goal/module. You may send the
+> owner short messages via `message_owner` (max 5/day; Atlas enforces quiet hours and
+> sends on your behalf). Prefer proposals for anything actionable — messages are for
+> observations and questions only. Everything you propose waits for the owner's approval
+> in the inbox.
 
 ## Step 4 — verify the loop end to end
 
@@ -121,6 +129,10 @@ Tell Hermes (in its own system/config prompt) the rules of engagement. Suggested
    `created_by="hermes"` should appear in the Coach tile/modal.
 3. Accept it in the Coach inbox → the change applies through the validated service and is
    audited. Dismiss → nothing changes.
+4. Ask Hermes to send you a short note via `message_owner`; within a minute
+   (outside quiet hours) it should arrive on your WhatsApp, and appear in the
+   hub's message list. Reply `accept <id>` to a proposal ping — the proposal is
+   applied and audited exactly as if you'd clicked Accept in the Coach inbox.
 
 ## Cadence (optional, later)
 
