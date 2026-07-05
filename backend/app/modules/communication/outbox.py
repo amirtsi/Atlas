@@ -108,3 +108,91 @@ def coach_quota_remaining(conn: Connection, kind: str) -> int:
     if cap is None:
         raise ValueError(f"kind has no daily cap: {kind}")
     return max(0, cap - _count_created_today(conn, kind))
+
+
+def _sent_today(conn: Connection, kind: str) -> int:
+    today = utc_now_iso()[:10]
+    row = conn.execute(
+        "SELECT COUNT(*) FROM outbox WHERE kind = ? AND status = 'sent' "
+        "AND substr(sent_at, 1, 10) = ?",
+        (kind, today),
+    ).fetchone()
+    return int(row[0])
+
+
+def dispatch_pending(conn: Connection, *, now_local: datetime | None = None) -> list[dict]:
+    """Send eligible queued rows through the existing bridge send path.
+
+    ALL policy lives here: quiet hours, per-kind daily caps, retry backoff.
+    Returns one result dict per row acted on (for logging/tests)."""
+    from zoneinfo import ZoneInfo
+
+    from app.modules.communication.evolution import normalize_whatsapp_number
+    from app.modules.communication.router import _active_evolution_provider, _send_and_store_reply
+
+    settings = get_settings()
+    now_local = now_local or datetime.now(ZoneInfo(settings.timezone))
+    if in_quiet_hours(now_local, settings.quiet_hours_start, settings.quiet_hours_end):
+        return []
+
+    provider = _active_evolution_provider(conn)
+    if provider is None:
+        logger.warning("Outbox: no active WhatsApp provider; queued rows are held.")
+        return []
+    recipient = normalize_whatsapp_number(
+        str((provider.get("config") or {}).get("default_recipient") or "")
+    )
+    if not recipient:
+        logger.warning("Outbox: active provider has no default_recipient; queued rows are held.")
+        return []
+
+    rows = rows_to_dicts(
+        conn.execute(
+            "SELECT * FROM outbox WHERE status = 'queued' "
+            "AND (next_attempt_at IS NULL OR next_attempt_at <= ?) "
+            "ORDER BY created_at",
+            (utc_now_iso(),),
+        ).fetchall()
+    )
+    results: list[dict] = []
+    for row in rows:
+        cap = _daily_cap(row["kind"])
+        if cap is not None and _sent_today(conn, row["kind"]) >= cap:
+            results.append({"outbox_id": row["id"], "status": "held_daily_cap"})
+            continue
+        message_id = _send_and_store_reply(conn, provider, recipient, row["body"])
+        message = conn.execute(
+            "SELECT status, error FROM communication_messages WHERE id = ?", (message_id,)
+        ).fetchone()
+        if message["status"] == "failed":
+            attempts = row["attempts"] + 1
+            if attempts >= MAX_ATTEMPTS:
+                conn.execute(
+                    "UPDATE outbox SET status = 'failed', attempts = ?, last_error = ? WHERE id = ?",
+                    (attempts, message["error"], row["id"]),
+                )
+                results.append({"outbox_id": row["id"], "status": "failed"})
+            else:
+                next_attempt = (
+                    (datetime.now(UTC) + timedelta(minutes=2**attempts))
+                    .replace(microsecond=0)
+                    .isoformat()
+                )
+                conn.execute(
+                    "UPDATE outbox SET attempts = ?, last_error = ?, next_attempt_at = ? WHERE id = ?",
+                    (attempts, message["error"], next_attempt, row["id"]),
+                )
+                results.append({"outbox_id": row["id"], "status": "retry_scheduled"})
+        else:
+            conn.execute(
+                "UPDATE outbox SET status = 'sent', sent_at = ? WHERE id = ?",
+                (utc_now_iso(), row["id"]),
+            )
+            results.append({"outbox_id": row["id"], "status": "sent", "message_id": message_id})
+    return results
+
+
+def run_dispatch_tick() -> list[dict]:
+    """One dispatcher heartbeat (opens its own connection; scheduler calls this)."""
+    with db_connection() as conn:
+        return dispatch_pending(conn)
