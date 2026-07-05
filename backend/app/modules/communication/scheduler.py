@@ -117,3 +117,25 @@ async def run_daily_brief_scheduler() -> None:
         except Exception:  # never let a transient error kill the loop
             logger.exception("Daily brief dispatch failed; retrying in 5 min.")
             await asyncio.sleep(300)
+
+
+async def run_outbox_dispatcher() -> None:
+    """Long-lived heartbeat for the coach outbox: drain the queue every 60s.
+
+    All policy (quiet hours, caps, retry) lives in outbox.dispatch_pending —
+    this loop only provides the tick. Sleeps before the first tick so app
+    startup (and tests) never race an immediate dispatch."""
+    from app.modules.communication.outbox import run_dispatch_tick
+
+    logger.info("Outbox dispatcher active — 60s tick.")
+    while True:
+        try:
+            await asyncio.sleep(60)
+            results = await asyncio.to_thread(run_dispatch_tick)
+            if results:
+                logger.info("Outbox dispatch: %s", results)
+        except asyncio.CancelledError:
+            logger.info("Outbox dispatcher stopped.")
+            break
+        except Exception:  # never let a transient error kill the loop
+            logger.exception("Outbox dispatch tick failed; retrying next tick.")

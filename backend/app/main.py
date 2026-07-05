@@ -10,7 +10,7 @@ from app.core.logging import configure_logging, get_logger
 from app.modules.activity_ledger.router import router as activity_router
 from app.modules.audit.router import router as audit_router
 from app.modules.communication.router import router as communication_router
-from app.modules.communication.scheduler import run_daily_brief_scheduler
+from app.modules.communication.scheduler import run_daily_brief_scheduler, run_outbox_dispatcher
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.disciplines.router import router as disciplines_router
 from app.modules.learning.router import router as learning_router
@@ -34,13 +34,16 @@ async def lifespan(app: FastAPI):
     logger.info("Atlas API starting (env=%s)", settings.env)
     scheduler_task = asyncio.create_task(run_daily_brief_scheduler())
     obsidian_task = asyncio.create_task(run_obsidian_export_scheduler())
+    outbox_task = asyncio.create_task(run_outbox_dispatcher())
     app.state.scheduler_task = scheduler_task
     app.state.obsidian_task = obsidian_task
+    app.state.outbox_task = outbox_task
     try:
         yield
     finally:
         scheduler_task.cancel()
         obsidian_task.cancel()
+        outbox_task.cancel()
         logger.info("Atlas API shutting down")
 
 

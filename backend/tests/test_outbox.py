@@ -205,3 +205,10 @@ class DispatchPendingTest(unittest.TestCase):
                 self.assertEqual(outbox.dispatch_pending(conn, now_local=NOON), [])
                 row = conn.execute("SELECT status FROM outbox").fetchone()
             self.assertEqual(row["status"], "queued")
+
+
+class DispatcherWiringTest(unittest.TestCase):
+    def test_app_lifespan_starts_outbox_dispatcher(self) -> None:
+        with TestClient(app):
+            self.assertTrue(hasattr(app.state, "outbox_task"))
+            self.assertFalse(app.state.outbox_task.done())
