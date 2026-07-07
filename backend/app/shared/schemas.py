@@ -148,6 +148,23 @@ class ProjectItemComplete(AtlasModel):
     notes: str | None = None
 
 
+class HobbyIdeaCreate(AtlasModel):
+    title: str = Field(min_length=1)
+    notes: str | None = None
+
+
+class HobbyIdeaUpdate(AtlasModel):
+    title: str | None = None
+    notes: str | None = None
+    pinned: bool | None = None
+
+
+class HobbyIdeaComplete(AtlasModel):
+    log_activity: bool = True
+    duration_minutes: int | None = None
+    notes: str | None = None
+
+
 class LearningUnitCreate(AtlasModel):
     unit_type: str = Field(min_length=1)
     title: str = Field(min_length=1)

@@ -13,6 +13,7 @@ from app.modules.communication.router import router as communication_router
 from app.modules.communication.scheduler import run_daily_brief_scheduler, run_outbox_dispatcher
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.disciplines.router import router as disciplines_router
+from app.modules.hobby.router import router as hobby_router
 from app.modules.learning.router import router as learning_router
 from app.modules.life_modules.router import router as modules_router
 from app.modules.metrics.router import router as metrics_router
@@ -67,6 +68,7 @@ def create_app() -> FastAPI:
     app.include_router(disciplines_router, prefix="/api/v1")
     app.include_router(modules_router, prefix="/api/v1")
     app.include_router(project_router, prefix="/api/v1")
+    app.include_router(hobby_router, prefix="/api/v1")
     app.include_router(learning_router, prefix="/api/v1")
     app.include_router(wellbeing_router, prefix="/api/v1")
     app.include_router(activity_router, prefix="/api/v1")

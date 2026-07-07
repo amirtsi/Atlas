@@ -18,6 +18,7 @@ VALID_MODULE_TYPES = {
     "learning",
     "recovery",
     "relationship",
+    "hobby",
     "finance",
     "calendar",
     "ai_coach",

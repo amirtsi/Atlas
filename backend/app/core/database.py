@@ -113,6 +113,19 @@ CREATE TABLE IF NOT EXISTS learning_units (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS hobby_ideas (
+  id TEXT PRIMARY KEY,
+  module_id TEXT NOT NULL REFERENCES life_modules(id),
+  title TEXT NOT NULL,
+  notes TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  pinned INTEGER NOT NULL DEFAULT 0,
+  completed_at TEXT,
+  completed_activity_id TEXT REFERENCES activities(id),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS audit_events (
   id TEXT PRIMARY KEY,
   entity_type TEXT NOT NULL,
