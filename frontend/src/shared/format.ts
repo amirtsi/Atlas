@@ -81,6 +81,7 @@ export function moduleTypeLabel(type: string): string {
     learning: "Learning",
     recovery: "Recovery",
     relationship: "Relationship",
+    hobby: "Hobby",
     finance: "Finance",
     calendar: "Calendar",
     ai_coach: "AI Coach",

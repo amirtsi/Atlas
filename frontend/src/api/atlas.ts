@@ -169,6 +169,7 @@ export type ModulePayload = {
   slug: string;
   description?: string;
   priority?: number;
+  config?: Record<string, unknown>;
 };
 
 export type ModuleUpdatePayload = {
@@ -540,6 +541,67 @@ export function deleteProjectItem(moduleId: string, itemId: string): Promise<Pro
   return request<ProjectItem>(`/project/${moduleId}/items/${itemId}`, {
     method: "DELETE"
   });
+}
+
+export type HobbyIdeaStatus = "open" | "done" | "dropped";
+
+export type HobbyIdea = {
+  id: string;
+  module_id: string;
+  title: string;
+  notes: string | null;
+  status: HobbyIdeaStatus;
+  pinned: number;
+  completed_at: string | null;
+  completed_activity_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export function listHobbyIdeas(moduleId: string, status?: HobbyIdeaStatus): Promise<HobbyIdea[]> {
+  const query = status ? `?status=${status}` : "";
+  return request<HobbyIdea[]>(`/hobby/${moduleId}/ideas${query}`);
+}
+
+export function createHobbyIdea(moduleId: string, payload: { title: string; notes?: string }): Promise<HobbyIdea> {
+  return request<HobbyIdea>(`/hobby/${moduleId}/ideas`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function updateHobbyIdea(
+  moduleId: string,
+  ideaId: string,
+  payload: { title?: string; notes?: string; pinned?: boolean }
+): Promise<HobbyIdea> {
+  return request<HobbyIdea>(`/hobby/${moduleId}/ideas/${ideaId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export function completeHobbyIdea(
+  moduleId: string,
+  ideaId: string,
+  options?: { logActivity?: boolean; durationMinutes?: number; notes?: string }
+): Promise<HobbyIdea> {
+  return request<HobbyIdea>(`/hobby/${moduleId}/ideas/${ideaId}/complete`, {
+    method: "POST",
+    body: JSON.stringify({
+      log_activity: options?.logActivity ?? true,
+      duration_minutes: options?.durationMinutes,
+      notes: options?.notes
+    })
+  });
+}
+
+export function dropHobbyIdea(moduleId: string, ideaId: string): Promise<HobbyIdea> {
+  return request<HobbyIdea>(`/hobby/${moduleId}/ideas/${ideaId}/drop`, { method: "POST" });
+}
+
+export function deleteHobbyIdea(moduleId: string, ideaId: string): Promise<HobbyIdea> {
+  return request<HobbyIdea>(`/hobby/${moduleId}/ideas/${ideaId}`, { method: "DELETE" });
 }
 
 export function getLearningOverview(moduleId: string): Promise<LearningOverview> {
