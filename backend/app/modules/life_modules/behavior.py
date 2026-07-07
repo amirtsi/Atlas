@@ -111,6 +111,30 @@ def project_item_counts(conn: Connection, module_id: str) -> dict:
     return counts
 
 
+def hobby_days_since_last(conn: Connection, module_id: str) -> int | None:
+    row = conn.execute(
+        "SELECT MAX(occurred_at) AS last FROM activities WHERE module_id = ?", (module_id,)
+    ).fetchone()
+    if not row["last"]:
+        return None
+    last_day = datetime.fromisoformat(row["last"]).date()
+    return max(0, (datetime.now(UTC).date() - last_day).days)
+
+
+def hobby_next_idea(conn: Connection, module_id: str) -> dict | None:
+    """The suggestion: pinned open idea if any, else the oldest open idea."""
+    row = conn.execute(
+        """
+        SELECT id, title FROM hobby_ideas
+        WHERE module_id = ? AND status = 'open'
+        ORDER BY pinned DESC, created_at ASC
+        LIMIT 1
+        """,
+        (module_id,),
+    ).fetchone()
+    return {"id": row["id"], "title": row["title"]} if row else None
+
+
 def build_behavior(conn: Connection, module: dict) -> dict:
     config = module.get("config") or {}
     activity = module_activity_summary(conn, module["id"])
@@ -176,6 +200,24 @@ def build_behavior(conn: Connection, module: dict) -> dict:
                 "learning_units_total": units_total,
                 "learning_units_done": units_done,
                 "progress_percent": round((units_done / units_total) * 100) if units_total else 0,
+            },
+        }
+
+    if module_type == "hobby":
+        ideas_open = conn.execute(
+            "SELECT COUNT(id) AS count FROM hobby_ideas WHERE module_id = ? AND status = 'open'",
+            (module["id"],),
+        ).fetchone()["count"]
+        return {
+            "module_id": module["id"],
+            "type": module_type,
+            "config": config,
+            "summary": {
+                **activity,
+                "days_since_last": hobby_days_since_last(conn, module["id"]),
+                "ideas_open": ideas_open,
+                "next_idea": hobby_next_idea(conn, module["id"]),
+                "category": config.get("category") or "creative",
             },
         }
 
