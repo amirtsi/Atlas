@@ -49,13 +49,17 @@ CREATE TABLE IF NOT EXISTS hobby_ideas (
   notes TEXT,
   status TEXT NOT NULL DEFAULT 'open',   -- open | done | dropped
   pinned INTEGER NOT NULL DEFAULT 0,     -- pinned idea = explicit "next"
+  completed_at TEXT,                     -- set when status becomes done
+  completed_activity_id TEXT REFERENCES activities(id),  -- session logged by "Did it"
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 ```
 
-At most one idea per module is pinned; pinning an idea unpins any other idea of that module
-(enforced in the endpoint, single transaction).
+`completed_at` / `completed_activity_id` mirror `project_items` — a done idea points at the
+real session it logged. At most one idea per module is pinned; pinning an idea unpins any
+other idea of that module, and `pinned` is cleared whenever an idea leaves `open`
+(both enforced in the endpoint, single transaction).
 
 ## Behavior (backend/app/modules/life_modules/behavior.py)
 
@@ -70,22 +74,36 @@ New `hobby` branch in `build_behavior`, summary fields all derived from real row
 
 No `progress_percent` for hobbies — hobbies don't "complete"; the tile shows gap + suggestion.
 
-## API (life_modules router)
+## API (new `backend/app/modules/hobby/` module)
 
-- `GET  /api/modules/{module_id}/ideas` — list ideas (filter `?status=open` supported).
-- `POST /api/modules/{module_id}/ideas` — create `{title, notes?}`.
-- `PATCH /api/ideas/{idea_id}` — update `{title?, notes?, pinned?, status?}`.
-  - `status: "done"` accepts optional `log_session: {duration_minutes?, notes?}`;
-    when present, marks the idea done **and** inserts the activity in one transaction
-    ("Did it" = one tap). Activity title = idea title, `activity_type = "hobby"`,
-    `source = "hobby_idea"`, `occurred_at` = now (UTC).
-  - `status: "dropped"` archives without logging anything.
-- `DELETE /api/ideas/{idea_id}` — hard delete (for typos; normal flow is drop).
+Type-specific sub-resources get their own backend module, mirroring `project` (items) and
+`learning` (units). Router prefix `/hobby`, all idea routes scoped under the module path:
 
-Validation: idea endpoints 404 on unknown module/idea and 422 when the target module is not
-`type = 'hobby'` or is archived. Audit events recorded like other entity writes.
+- `GET    /hobby/{module_id}/ideas` — list ideas (filter `?status=open` supported).
+- `POST   /hobby/{module_id}/ideas` — create `{title, notes?}`.
+- `PATCH  /hobby/{module_id}/ideas/{idea_id}` — update `{title?, notes?, pinned?}`;
+  `pinned: true` unpins any other idea of the module in the same transaction.
+- `POST   /hobby/{module_id}/ideas/{idea_id}/complete` — the "Did it" action, mirroring
+  `project_items` complete: body `{log_activity: bool = true, duration_minutes?, notes?}`.
+  409 if the idea is not `open`. When `log_activity`, inserts the session via the
+  activity-ledger service (`insert_activity`) in the same transaction — activity title =
+  idea title, `activity_type = "hobby"`, `source = "hobby_idea"`,
+  `metadata.hobby_idea_id` set, `occurred_at` = now (UTC) — then marks the idea done with
+  `completed_at` and `completed_activity_id`, clearing `pinned`.
+- `POST   /hobby/{module_id}/ideas/{idea_id}/drop` — archive without logging anything
+  (sets `status = 'dropped'`, clears `pinned`).
+- `DELETE /hobby/{module_id}/ideas/{idea_id}` — hard delete (for typos; normal flow is drop).
+
+Validation: 404 on unknown module/idea, 422 when the target module is not `type = 'hobby'`
+or is archived. Audit events recorded like other entity writes (project router precedent).
 
 ## Frontend
+
+All hobby UI lives in a new feature file `frontend/src/features/hobbies.tsx` (tile, expand
+modal, detail view) with pure logic in `hobby-logic.ts` (+ tests), mirroring how
+`widgets.tsx` exports `NewsTile`/`QuoteStrip` for App to compose. `dashboard.tsx` (889
+lines) and `modules.tsx` (972 lines) only gain imports and a mount point each — no hobby
+logic inline.
 
 ### Modules page (frontend/src/features/modules.tsx)
 
@@ -123,11 +141,13 @@ Hobby ordering in tile and modal: longest gap first (most starving on top), `nul
 
 ## Testing
 
-- **Backend (pytest, temp DB per the no-test-data-in-dev-DB rule):**
-  ideas CRUD (create/list/patch/delete, 404/422 paths), pin exclusivity,
-  done+log transaction (activity row created with right module/type/source; rollback on
-  failure), behavior summary branch (suggestion picking: pinned beats oldest; empty backlog
-  → `next_idea: null`; `days_since_last` correctness including never-logged).
+- **Backend (`tests/test_hobby_ideas.py`, temp DB per the no-test-data-in-dev-DB rule):**
+  ideas CRUD (create/list/patch/delete, 404/422 paths), pin exclusivity + pinned cleared on
+  complete/drop, complete endpoint (activity row created via ledger service with right
+  module/type/source/back-reference; 409 on non-open; `log_activity: false` skips the
+  session; rollback on failure), behavior summary branch (suggestion picking: pinned beats
+  oldest; empty backlog → `next_idea: null`; `days_since_last` correctness including
+  never-logged).
 - **Frontend:** `hobby-logic.test.ts` mirroring existing `*-logic.test.ts` files —
   suggestion/gap formatting, hobby ordering (longest gap first, never-logged first),
   tile cap at 3 with "+N more".
