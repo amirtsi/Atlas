@@ -96,6 +96,13 @@ Type-specific sub-resources get their own backend module, mirroring `project` (i
 
 Validation: 404 on unknown module/idea, 422 when the target module is not `type = 'hobby'`
 or is archived. Audit events recorded like other entity writes (project router precedent).
+Router registered in `backend/app/main.py` with `prefix="/api/v1"`, next to project/learning.
+
+**No new read endpoint for the dashboard:** `dashboard/service.py` already attaches
+`build_behavior(...)` to every active module in the dashboard response, so the Hobbies tile
+reads `active_modules` filtered to `type = 'hobby'` — `days_since_last`, `next_idea`,
+`category`, and weekly counts arrive with the existing payload. The hobby router serves
+only idea *writes* and the backlog list view.
 
 ## Frontend
 
