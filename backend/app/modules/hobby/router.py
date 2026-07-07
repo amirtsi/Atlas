@@ -4,8 +4,9 @@ from fastapi import APIRouter, HTTPException
 
 from app.core.database import db_connection, new_id, row_to_dict, rows_to_dicts
 from app.core.time import utc_now_iso
+from app.modules.activity_ledger.service import insert_activity
 from app.shared.audit import record_audit_event
-from app.shared.schemas import HobbyIdeaCreate, HobbyIdeaUpdate
+from app.shared.schemas import ActivityCreate, HobbyIdeaComplete, HobbyIdeaCreate, HobbyIdeaUpdate
 from app.shared.sql import get_or_404
 
 router = APIRouter(prefix="/hobby", tags=["hobby"])
@@ -115,3 +116,90 @@ def update_idea(module_id: str, idea_id: str, payload: HobbyIdeaUpdate) -> dict:
                 changes=data,
             )
         return _get_idea(conn, module_id, idea_id)
+
+
+@router.post("/{module_id}/ideas/{idea_id}/complete")
+def complete_idea(module_id: str, idea_id: str, payload: HobbyIdeaComplete) -> dict:
+    """Close an idea and (by default) log a real session — acting on it creates a record."""
+    now = utc_now_iso()
+    with db_connection() as conn:
+        module = _get_hobby_module(conn, module_id, for_write=True)
+        idea = _get_idea(conn, module_id, idea_id)
+        if idea["status"] != "open":
+            raise HTTPException(status_code=409, detail="Idea is not open")
+
+        activity_id = None
+        if payload.log_activity:
+            activity = insert_activity(
+                conn,
+                ActivityCreate(
+                    module_id=module_id,
+                    discipline_id=module["discipline_id"],
+                    activity_type="hobby",
+                    title=idea["title"],
+                    notes=payload.notes,
+                    duration_minutes=payload.duration_minutes,
+                    source="hobby_idea",
+                    metadata={"hobby_idea_id": idea_id},
+                ),
+            )
+            activity_id = activity["id"]
+
+        conn.execute(
+            """
+            UPDATE hobby_ideas
+            SET status = 'done', pinned = 0, completed_at = ?, completed_activity_id = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (now, activity_id, now, idea_id),
+        )
+        record_audit_event(
+            conn,
+            entity_type="hobby_idea",
+            entity_id=idea_id,
+            action="completed",
+            summary=f"Did it: {idea['title']}",
+            changes={"logged_activity": bool(activity_id)},
+        )
+        return _get_idea(conn, module_id, idea_id)
+
+
+@router.post("/{module_id}/ideas/{idea_id}/drop")
+def drop_idea(module_id: str, idea_id: str) -> dict:
+    """Archive an idea without pretending it was done — no activity is logged."""
+    now = utc_now_iso()
+    with db_connection() as conn:
+        _get_hobby_module(conn, module_id, for_write=True)
+        idea = _get_idea(conn, module_id, idea_id)
+        if idea["status"] != "open":
+            raise HTTPException(status_code=409, detail="Idea is not open")
+        conn.execute(
+            "UPDATE hobby_ideas SET status = 'dropped', pinned = 0, updated_at = ? WHERE id = ?",
+            (now, idea_id),
+        )
+        record_audit_event(
+            conn,
+            entity_type="hobby_idea",
+            entity_id=idea_id,
+            action="dropped",
+            summary=f"Dropped hobby idea: {idea['title']}",
+            changes={},
+        )
+        return _get_idea(conn, module_id, idea_id)
+
+
+@router.delete("/{module_id}/ideas/{idea_id}")
+def delete_idea(module_id: str, idea_id: str) -> dict:
+    with db_connection() as conn:
+        _get_hobby_module(conn, module_id, for_write=True)
+        idea = _get_idea(conn, module_id, idea_id)
+        conn.execute("DELETE FROM hobby_ideas WHERE id = ?", (idea_id,))
+        record_audit_event(
+            conn,
+            entity_type="hobby_idea",
+            entity_id=idea_id,
+            action="deleted",
+            summary=f"Deleted hobby idea: {idea['title']}",
+            changes={"title": idea["title"]},
+        )
+        return idea

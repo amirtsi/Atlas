@@ -1,5 +1,7 @@
 """Hobby module + idea backlog tests. Temp DB per test via conftest."""
 
+import json
+
 from fastapi.testclient import TestClient
 
 from app.core.database import db_connection, new_id
@@ -181,3 +183,74 @@ def test_ideas_module_guards():
             f"/api/v1/hobby/{hobby['id']}/ideas/does-not-exist", json={"title": "x"}
         )
         assert idea_404.status_code == 404
+
+
+def test_complete_logs_session_and_backlinks():
+    with TestClient(app) as client:
+        module = _create_hobby(client)
+        idea_id = _insert_idea(module["id"], "Bake a 70% loaf", pinned=1)
+
+        response = client.post(
+            f"/api/v1/hobby/{module['id']}/ideas/{idea_id}/complete",
+            json={"duration_minutes": 45, "notes": "came out great"},
+        )
+        assert response.status_code == 200, response.text
+        idea = response.json()
+        assert idea["status"] == "done"
+        assert idea["pinned"] == 0
+        assert idea["completed_at"] is not None
+        assert idea["completed_activity_id"]
+
+    with db_connection() as conn:
+        activity = conn.execute(
+            "SELECT * FROM activities WHERE id = ?", (idea["completed_activity_id"],)
+        ).fetchone()
+        assert activity["module_id"] == module["id"]
+        assert activity["activity_type"] == "hobby"
+        assert activity["title"] == "Bake a 70% loaf"
+        assert activity["duration_minutes"] == 45
+        assert activity["source"] == "hobby_idea"
+        assert json.loads(activity["metadata"])["hobby_idea_id"] == idea_id
+
+
+def test_complete_without_logging_skips_activity():
+    with TestClient(app) as client:
+        module = _create_hobby(client)
+        idea_id = _insert_idea(module["id"], "Quiet close")
+        idea = client.post(
+            f"/api/v1/hobby/{module['id']}/ideas/{idea_id}/complete",
+            json={"log_activity": False},
+        ).json()
+        assert idea["status"] == "done"
+        assert idea["completed_activity_id"] is None
+    with db_connection() as conn:
+        count = conn.execute("SELECT COUNT(id) AS count FROM activities").fetchone()["count"]
+        assert count == 0
+
+
+def test_complete_non_open_idea_conflicts():
+    with TestClient(app) as client:
+        module = _create_hobby(client)
+        idea_id = _insert_idea(module["id"], "Already done", status="done")
+        response = client.post(
+            f"/api/v1/hobby/{module['id']}/ideas/{idea_id}/complete", json={}
+        )
+        assert response.status_code == 409
+
+
+def test_drop_archives_without_activity_and_delete_removes():
+    with TestClient(app) as client:
+        module = _create_hobby(client)
+        idea_id = _insert_idea(module["id"], "Meh idea", pinned=1)
+
+        dropped = client.post(f"/api/v1/hobby/{module['id']}/ideas/{idea_id}/drop")
+        assert dropped.status_code == 200, dropped.text
+        assert dropped.json()["status"] == "dropped"
+        assert dropped.json()["pinned"] == 0
+
+        deleted = client.delete(f"/api/v1/hobby/{module['id']}/ideas/{idea_id}")
+        assert deleted.status_code == 200
+        assert client.get(f"/api/v1/hobby/{module['id']}/ideas").json() == []
+    with db_connection() as conn:
+        count = conn.execute("SELECT COUNT(id) AS count FROM activities").fetchone()["count"]
+        assert count == 0
