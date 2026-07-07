@@ -88,6 +88,7 @@ export function HobbiesTile({ dashboard, onChanged }: { dashboard: DashboardResp
 function HobbyModalRow({ row, onChanged }: { row: HobbyRow; onChanged?: () => void }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
+  const [backlogKey, setBacklogKey] = useState(0);
 
   async function didIt() {
     if (!row.nextIdea || isBusy) {
@@ -96,6 +97,7 @@ function HobbyModalRow({ row, onChanged }: { row: HobbyRow; onChanged?: () => vo
     setIsBusy(true);
     try {
       await completeHobbyIdea(row.id, row.nextIdea.id);
+      setBacklogKey((v) => v + 1);
       onChanged?.();
     } finally {
       setIsBusy(false);
@@ -109,6 +111,7 @@ function HobbyModalRow({ row, onChanged }: { row: HobbyRow; onChanged?: () => vo
     setIsBusy(true);
     try {
       await quickLog({ module_id: row.id, title: `סשן ${row.name}`, activity_type: "hobby" });
+      setBacklogKey((v) => v + 1);
       onChanged?.();
     } finally {
       setIsBusy(false);
@@ -136,12 +139,20 @@ function HobbyModalRow({ row, onChanged }: { row: HobbyRow; onChanged?: () => vo
         {gapLabel(row.daysSince)} · {row.weeklyCount} סשנים השבוע · {row.ideasOpen} רעיונות פתוחים
         {row.nextIdea ? <> · הבא: {row.nextIdea.title}</> : null}
       </p>
-      {isExpanded ? <IdeaBacklog moduleId={row.id} onChanged={onChanged} /> : null}
+      {isExpanded ? <IdeaBacklog moduleId={row.id} onChanged={onChanged} refreshKey={backlogKey} /> : null}
     </article>
   );
 }
 
-export function IdeaBacklog({ moduleId, onChanged }: { moduleId: string; onChanged?: () => void }) {
+export function IdeaBacklog({
+  moduleId,
+  onChanged,
+  refreshKey
+}: {
+  moduleId: string;
+  onChanged?: () => void;
+  refreshKey?: number;
+}) {
   const [ideas, setIdeas] = useState<HobbyIdea[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [newTitle, setNewTitle] = useState("");
@@ -159,7 +170,7 @@ export function IdeaBacklog({ moduleId, onChanged }: { moduleId: string; onChang
 
   useEffect(() => {
     reload();
-  }, [reload]);
+  }, [reload, refreshKey]);
 
   async function run(id: string, action: () => Promise<unknown>) {
     setBusyId(id);

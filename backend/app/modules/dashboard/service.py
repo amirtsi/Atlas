@@ -54,7 +54,6 @@ def get_today_dashboard() -> dict:
                 JOIN disciplines d ON d.id = lm.discipline_id
                 WHERE lm.status = 'active'
                 ORDER BY lm.priority ASC, lm.name ASC
-                LIMIT 8
                 """
             ).fetchall()
         )
