@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ClipboardList, Compass, MessageCircle, Gauge, History, Plus, ShieldCheck, Sparkles } from "lucide-react";
 import { type AuditEvent, type ActivityTemplate, type ActivityTemplatePayload, type ActivityUpdatePayload, type CreateActivityPayload, type CommunicationMessage, type CommunicationProvider, type DashboardResponse, type Discipline, type JournalActivity, type LifeModule, type ModulePayload, type ModuleUpdatePayload, type QuickLogPayload, createCommunicationProvider, createActivityTemplate, archiveModule, pauseModule, resumeModule, createActivity, createModule, deleteActivity, updateActivity, getActivities, getActivityTemplates, getAuditEvents, getCommunicationMessages, getCommunicationProviders, getDashboard, getDisciplines, getModules, linkActivityToStep, quickLog, sendCommunicationMessage, updateModule } from "./api/atlas";
 import { ApiUnavailablePanel, NewsTile, QuoteStrip } from "./features/widgets";
+import { HobbiesTile } from "./features/hobbies";
 import { JournalView } from "./features/journal";
 import { ModulesView } from "./features/modules";
 import { LifePulse, MissionCenter, LifeTimeline, DashboardCalendar, RightNowHero, CockpitModal, type CockpitModalKind } from "./features/dashboard";
@@ -252,6 +253,7 @@ export function App() {
     { key: "communication" as const, label: "Comms", icon: <MessageCircle size={20} /> }
   ];
   const todayLabel = new Intl.DateTimeFormat("he-IL", { weekday: "long", day: "numeric", month: "long" }).format(new Date());
+  const hasHobbies = (dashboard?.active_modules ?? []).some((module) => module.type === "hobby");
   const statusLabel = isLoading ? "מתחבר…" : error ? "שגיאת API" : "מחובר";
 
   return (
@@ -307,7 +309,7 @@ export function App() {
 
               <QuoteStrip />
 
-              <section className="bento" aria-label="Atlas dashboard">
+              <section className={`bento${hasHobbies ? " has-hobbies" : ""}`} aria-label="Atlas dashboard">
                 <RightNowHero
                   dashboard={dashboard}
                   onOpen={() => setCoachOpen(true)}
@@ -322,6 +324,7 @@ export function App() {
                   onOpenJournal={() => setView("journal")}
                   onOpen={() => setActiveModal("calendar")}
                 />
+                <HobbiesTile dashboard={dashboard} onChanged={refreshDashboard} />
                 <NewsTile />
               </section>
             </>
