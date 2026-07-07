@@ -5,11 +5,13 @@ import {
   completeHobbyIdea,
   createHobbyIdea,
   dropHobbyIdea,
+  getModuleBehavior,
   listHobbyIdeas,
   quickLog,
   updateHobbyIdea,
   type DashboardResponse,
-  type HobbyIdea
+  type HobbyIdea,
+  type ModuleBehavior
 } from "../api/atlas";
 import { Chip, Modal, Panel } from "../shared/ui";
 import {
@@ -285,6 +287,55 @@ export function IdeaBacklog({ moduleId, onChanged }: { moduleId: string; onChang
           הוסף
         </button>
       </form>
+    </div>
+  );
+}
+
+export function HobbyBoard({ moduleId, onChanged }: { moduleId: string; onChanged: () => void }) {
+  const [behavior, setBehavior] = useState<ModuleBehavior | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    getModuleBehavior(moduleId).then((next) => {
+      if (active) {
+        setBehavior(next);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [moduleId, refreshKey]);
+
+  const summary = (behavior?.summary ?? {}) as Record<string, unknown>;
+  const daysSince = typeof summary.days_since_last === "number" ? summary.days_since_last : null;
+
+  function handleChanged() {
+    setRefreshKey((value) => value + 1);
+    onChanged();
+  }
+
+  return (
+    <div className="hobby-board">
+      <div className="hobby-stat-row">
+        <div className="hobby-stat">
+          <strong>{daysSince ?? "—"}</strong>
+          <span>ימים מאז</span>
+        </div>
+        <div className="hobby-stat">
+          <strong>{Number(summary.weekly_activity_count ?? 0)}</strong>
+          <span>סשנים השבוע</span>
+        </div>
+        <div className="hobby-stat">
+          <strong>{Number(summary.weekly_minutes ?? 0)}</strong>
+          <span>דקות השבוע</span>
+        </div>
+        <div className="hobby-stat">
+          <strong>{Number(summary.ideas_open ?? 0)}</strong>
+          <span>רעיונות פתוחים</span>
+        </div>
+      </div>
+      <IdeaBacklog moduleId={moduleId} onChanged={handleChanged} />
     </div>
   );
 }

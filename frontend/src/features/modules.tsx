@@ -3,6 +3,8 @@ import { Activity, BookOpen, Bug, Check, ClipboardList, FlaskConical, Graduation
 import { completeLearningUnit, completeProjectItem, createLearningUnit, createProjectItem, deleteLearningUnit, deleteProjectItem, getLearningOverview, getModuleBehavior, getProjectOverview, getWellbeingOverview, logWellbeingSession, quickLog, type Accent, type Discipline, type LearningOverview, type LearningUnitType, type LifeModule, type ModuleBehavior, type ModulePayload, type ModuleUpdatePayload, type ProjectItem, type ProjectItemType, type ProjectOverview, type WellbeingOverview, updateLearningUnit, updateModuleBehavior, updateProjectItem } from "../api/atlas";
 import { Chip, ProgressBar } from "../shared/ui";
 import { accentColorVar, accentForSlug, disciplineLabel, formatActivityTime, moduleTypeLabel, slugify, toConfigNumber, toNumberDraft, toOptionalMinutes } from "../shared/format";
+import { HobbyBoard } from "./hobbies";
+import { HOBBY_CATEGORIES, HOBBY_CATEGORY_LABELS, type HobbyCategory } from "./hobby-logic";
 
 // Modules feature: the Project / Learning / Wellbeing boards, the ModulesView
 // manager, and ModuleEditCard. Extracted from App.tsx.
@@ -546,7 +548,7 @@ function WellbeingBoard({ moduleId, accent, onChanged }: { moduleId: string; acc
   );
 }
 
-export const moduleTypes = ["project", "habit", "learning", "recovery", "relationship", "finance", "calendar"] as const;
+export const moduleTypes = ["project", "habit", "learning", "recovery", "relationship", "hobby", "finance", "calendar"] as const;
 export const moduleStatuses = ["active", "paused", "completed", "archived"] as const;
 
 export function ModulesView({
@@ -566,6 +568,7 @@ export function ModulesView({
 }) {
   const [name, setName] = useState("");
   const [type, setType] = useState<(typeof moduleTypes)[number]>("project");
+  const [category, setCategory] = useState<HobbyCategory>("creative");
   const [disciplineId, setDisciplineId] = useState("");
   const [priority, setPriority] = useState("3");
   const [description, setDescription] = useState("");
@@ -628,7 +631,8 @@ export function ModulesView({
       type,
       discipline_id: selectedDisciplineId,
       description: description.trim() || undefined,
-      priority: Number.parseInt(priority, 10) || 3
+      priority: Number.parseInt(priority, 10) || 3,
+      config: type === "hobby" ? { category } : undefined
     });
     setName("");
     setDescription("");
@@ -763,6 +767,19 @@ export function ModulesView({
               </label>
             </div>
 
+            {type === "hobby" ? (
+              <label>
+                <span>קטגוריה</span>
+                <select value={category} onChange={(event) => setCategory(event.target.value as HobbyCategory)}>
+                  {HOBBY_CATEGORIES.map((option) => (
+                    <option key={option} value={option}>
+                      {HOBBY_CATEGORY_LABELS[option]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+
             <label>
               <span>Discipline</span>
               <select value={selectedDisciplineId} onChange={(event) => setDisciplineId(event.target.value)}>
@@ -844,9 +861,11 @@ export function ModulesView({
                     ? "Project board · live"
                     : selectedModule?.type === "learning"
                       ? "Learning board · live"
-                      : selectedModule?.type === "recovery" || selectedModule?.type === "relationship"
-                        ? "Sessions · live"
-                        : "MVP Behavior"}
+                      : selectedModule?.type === "hobby"
+                        ? "Hobby board · live"
+                        : selectedModule?.type === "recovery" || selectedModule?.type === "relationship"
+                          ? "Sessions · live"
+                          : "MVP Behavior"}
                 </span>
                 <h2>{selectedModule ? selectedModule.name : "Module behavior"}</h2>
               </div>
@@ -865,6 +884,8 @@ export function ModulesView({
                 accent={accentForSlug(disciplines.find((discipline) => discipline.id === selectedModule.discipline_id)?.slug)}
                 onChanged={onChanged}
               />
+            ) : selectedModule?.type === "hobby" ? (
+              <HobbyBoard moduleId={selectedModule.id} onChanged={onChanged} />
             ) : selectedModule?.type === "recovery" || selectedModule?.type === "relationship" ? (
               <WellbeingBoard
                 moduleId={selectedModule.id}
