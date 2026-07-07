@@ -12,7 +12,6 @@ export type HobbyRow = {
   daysSince: number | null;
   ideasOpen: number;
   nextIdea: { id: string; title: string } | null;
-  weeklyCount: number;
 };
 
 export const HOBBY_TILE_CAP = 3;
@@ -72,8 +71,7 @@ export function hobbyRows(modules: DashboardModule[]): HobbyRow[] {
         category: toCategory(summary.category),
         daysSince: typeof summary.days_since_last === "number" ? summary.days_since_last : null,
         ideasOpen: toCount(summary.ideas_open),
-        nextIdea,
-        weeklyCount: toCount(summary.weekly_activity_count)
+        nextIdea
       };
     })
     .sort(starvingFirst);
@@ -94,8 +92,4 @@ export function gapLabel(daysSince: number | null): string {
 
 export function gapTone(daysSince: number | null): "warm" | "ok" {
   return daysSince === null || daysSince >= HOBBY_GAP_WARM_DAYS ? "warm" : "ok";
-}
-
-export function weeklySessionsTotal(rows: HobbyRow[]): number {
-  return rows.reduce((sum, row) => sum + row.weeklyCount, 0);
 }

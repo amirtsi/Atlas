@@ -1,6 +1,6 @@
 import json
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from uuid import uuid4
@@ -120,6 +120,7 @@ CREATE TABLE IF NOT EXISTS hobby_ideas (
   notes TEXT,
   status TEXT NOT NULL DEFAULT 'open',
   pinned INTEGER NOT NULL DEFAULT 0,
+  deferred_at TEXT,
   completed_at TEXT,
   completed_activity_id TEXT REFERENCES activities(id),
   created_at TEXT NOT NULL,
@@ -330,24 +331,38 @@ def db_connection() -> Iterator[sqlite3.Connection]:
 #
 # To evolve the schema:
 #   * New table  -> add it to SCHEMA_SQL (IF NOT EXISTS). No migration needed.
-#   * Alter/backfill an existing table -> bump SCHEMA_VERSION and add the SQL to
-#     MIGRATIONS under the new version number (also reflect it in SCHEMA_SQL so
-#     fresh DBs are born current).
+#   * Alter/backfill an existing table -> bump SCHEMA_VERSION and add a
+#     state-checking migration callable to MIGRATIONS under the new version
+#     number (also reflect it in SCHEMA_SQL so fresh DBs are born current).
 # --------------------------------------------------------------------------- #
-SCHEMA_VERSION = 1
+def _migration_hobby_ideas_deferred_at(conn: sqlite3.Connection) -> None:
+    """v2: deck rotation ("דלג"). Only early feat/hobbies-module DBs have
+    hobby_ideas without the column; where SCHEMA_SQL just created the table
+    born-current (fresh DBs, or main-branch DBs meeting hobby_ideas for the
+    first time) there is nothing to do."""
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(hobby_ideas)").fetchall()}
+    if columns and "deferred_at" not in columns:
+        conn.execute("ALTER TABLE hobby_ideas ADD COLUMN deferred_at TEXT")
 
-# version -> SQL script applied exactly once when upgrading TO that version.
-MIGRATIONS: dict[int, str] = {
-    # 2: "ALTER TABLE activities ADD COLUMN plan_step_id TEXT;",
+
+SCHEMA_VERSION = 2
+
+# version -> migration applied exactly once when upgrading TO that version.
+# SCHEMA_SQL runs BEFORE migrations and its IF NOT EXISTS baseline creates new
+# tables born-current, so every migration must check state before ALTERing —
+# a blind executescript breaks fresh DBs (duplicate column) or pre-feature DBs
+# (no such table).
+MIGRATIONS: dict[int, Callable[[sqlite3.Connection], None]] = {
+    2: _migration_hobby_ideas_deferred_at,
 }
 
 
 def _apply_migrations(conn: sqlite3.Connection) -> None:
     current = conn.execute("PRAGMA user_version").fetchone()[0]
     for version in range(current + 1, SCHEMA_VERSION + 1):
-        script = MIGRATIONS.get(version)
-        if script:
-            conn.executescript(script)
+        migration = MIGRATIONS.get(version)
+        if migration:
+            migration(conn)
     if current != SCHEMA_VERSION:
         # PRAGMA can't be parameterized; SCHEMA_VERSION is an int constant.
         conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")

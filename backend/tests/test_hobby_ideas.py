@@ -254,3 +254,81 @@ def test_drop_archives_without_activity_and_delete_removes():
     with db_connection() as conn:
         count = conn.execute("SELECT COUNT(id) AS count FROM activities").fetchone()["count"]
         assert count == 0
+
+
+def _behavior_next(client: TestClient, module_id: str) -> dict | None:
+    return client.get(f"/api/v1/modules/{module_id}/behavior").json()["summary"]["next_idea"]
+
+
+def test_defer_sends_idea_to_back_of_deck():
+    with TestClient(app) as client:
+        module = _create_hobby(client)
+        first = _insert_idea(module["id"], "First", created_at="2026-01-01T00:00:00+00:00")
+        second = _insert_idea(module["id"], "Second", created_at="2026-02-01T00:00:00+00:00")
+
+        assert _behavior_next(client, module["id"])["id"] == first
+
+        deferred = client.post(f"/api/v1/hobby/{module['id']}/ideas/{first}/defer")
+        assert deferred.status_code == 200, deferred.text
+        assert deferred.json()["status"] == "open"
+        assert deferred.json()["deferred_at"] is not None
+
+        assert _behavior_next(client, module["id"])["id"] == second
+
+        # Deferring the second too rotates back to the first (earlier deferred_at).
+        client.post(f"/api/v1/hobby/{module['id']}/ideas/{second}/defer")
+        assert _behavior_next(client, module["id"])["id"] == first
+
+
+def test_defer_clears_pin_and_guards_non_open():
+    with TestClient(app) as client:
+        module = _create_hobby(client)
+        pinned = _insert_idea(module["id"], "Pinned", pinned=1)
+        other = _insert_idea(module["id"], "Other", created_at="2026-02-01T00:00:00+00:00")
+
+        deferred = client.post(f"/api/v1/hobby/{module['id']}/ideas/{pinned}/defer")
+        assert deferred.status_code == 200
+        assert deferred.json()["pinned"] == 0
+        assert _behavior_next(client, module["id"])["id"] == other
+
+        done = _insert_idea(module["id"], "Done", status="done")
+        conflict = client.post(f"/api/v1/hobby/{module['id']}/ideas/{done}/defer")
+        assert conflict.status_code == 409
+
+
+def test_migration_adds_deferred_at_to_pre_v2_table():
+    """A DB whose hobby_ideas predates deferred_at (early branch DBs) upgrades
+    cleanly; the baseline-created shape is left alone."""
+    import sqlite3
+
+    from app.core.config import get_settings
+    from app.core.database import initialize_database
+
+    path = get_settings().database_path
+    raw = sqlite3.connect(path)
+    raw.execute(
+        """
+        CREATE TABLE hobby_ideas (
+          id TEXT PRIMARY KEY,
+          module_id TEXT NOT NULL,
+          title TEXT NOT NULL,
+          notes TEXT,
+          status TEXT NOT NULL DEFAULT 'open',
+          pinned INTEGER NOT NULL DEFAULT 0,
+          completed_at TEXT,
+          completed_activity_id TEXT,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+        """
+    )
+    raw.execute("PRAGMA user_version = 1")
+    raw.commit()
+    raw.close()
+
+    initialize_database()
+
+    with db_connection() as conn:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(hobby_ideas)").fetchall()}
+        assert "deferred_at" in columns
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 2

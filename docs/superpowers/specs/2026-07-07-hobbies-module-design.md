@@ -159,6 +159,32 @@ Hobby ordering in tile and modal: longest gap first (most starving on top), `nul
   suggestion/gap formatting, hobby ordering (longest gap first, never-logged first),
   tile cap at 3 with "+N more".
 
+## v2 amendment (2026-07-07, owner feedback: "things in the concept are repetitive")
+
+The owner flagged conceptual duplication with existing modules. v2 deduplicates
+(mockup: same artifact URL, v2):
+
+- **Hobby ≠ Habit** — all weekly-count surfaces removed from hobby UI (tile footer,
+  modal stats, board stat tiles). A hobby answers two questions only: days since the
+  last session (gap) and what to do next. Weekly rhythm remains Habit's concept.
+  The behavior summary still carries `weekly_activity_count`/`weekly_minutes`
+  (other consumers read them); the hobby UI just doesn't show them.
+- **Ideas ≠ Tasks** — the checklist UI is replaced by a *deck*: one visible card
+  (the next idea) with three actions — עשיתי (complete + log session, unchanged
+  transaction), **דלג** (new: defer to the back of the deck), ויתור (drop). The full
+  list is an editor behind the card (add / pin / delete), no statuses or checkboxes.
+- **One action** — "לוג סשן" removed; free-form logging stays in the global quick-log.
+- **One surface** — the tile close-up and stat-tile HobbyBoard are gone; the modules
+  page renders the same deck component the modal uses.
+
+Backend for דלג: `hobby_ideas.deferred_at TEXT` (nullable); deck order everywhere is
+`pinned DESC, COALESCE(deferred_at, created_at) ASC`; `POST .../ideas/{id}/defer`
+(409 if not open, clears pin, audited). Schema: column added to `SCHEMA_SQL` +
+`SCHEMA_VERSION 2` migration. Note: this first real migration exposed a latent flaw
+in the migration mechanism (baseline runs before migrations, so blind ALTERs break
+fresh or pre-feature DBs) — `MIGRATIONS` now holds state-checking callables instead
+of raw SQL scripts.
+
 ## Out of scope (v1)
 
 - Photos/artifacts per idea, galleries.

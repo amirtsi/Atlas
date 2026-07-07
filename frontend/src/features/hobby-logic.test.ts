@@ -1,12 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DashboardModule } from "../api/atlas";
-import {
-  HOBBY_TILE_CAP,
-  gapLabel,
-  gapTone,
-  hobbyRows,
-  weeklySessionsTotal
-} from "./hobby-logic";
+import { HOBBY_TILE_CAP, gapLabel, gapTone, hobbyRows } from "./hobby-logic";
 
 function hobbyModule(
   name: string,
@@ -82,16 +76,15 @@ describe("gap formatting", () => {
   });
 });
 
-describe("tile totals", () => {
-  it("caps at 3 and sums weekly sessions", () => {
+describe("tile cap", () => {
+  it("caps the preview at 3, most-starving first", () => {
     const rows = hobbyRows([
-      hobbyModule("A", { days_since_last: 1, weekly_activity_count: 2 }),
-      hobbyModule("B", { days_since_last: 2, weekly_activity_count: 1 }),
-      hobbyModule("C", { days_since_last: 3, weekly_activity_count: 0 }),
-      hobbyModule("D", { days_since_last: 4, weekly_activity_count: 1 })
+      hobbyModule("A", { days_since_last: 1 }),
+      hobbyModule("B", { days_since_last: 2 }),
+      hobbyModule("C", { days_since_last: 3 }),
+      hobbyModule("D", { days_since_last: 4 })
     ]);
     expect(rows.length).toBe(4);
     expect(rows.slice(0, HOBBY_TILE_CAP).map((row) => row.name)).toEqual(["D", "C", "B"]);
-    expect(weeklySessionsTotal(rows)).toBe(4);
   });
 });
