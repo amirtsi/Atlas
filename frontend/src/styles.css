@@ -2940,7 +2940,7 @@ button,
   opacity: 0.55;
 }
 
-.module-save.module-delete:hover,
+.module-save.module-delete:hover:not(:disabled),
 .module-save.module-delete-arm {
   border-color: var(--red);
   color: var(--red);

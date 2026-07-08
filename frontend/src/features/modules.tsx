@@ -891,7 +891,7 @@ export function ModulesView({
                       >
                         מחק
                       </button>
-                      <button className="module-save" type="button" onClick={() => setConfirmDeleteId(null)}>
+                      <button className="module-save" type="button" disabled={isSaving} onClick={() => setConfirmDeleteId(null)}>
                         ביטול
                       </button>
                     </span>
