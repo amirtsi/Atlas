@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ClipboardList, Compass, MessageCircle, Gauge, History, Plus, ShieldCheck, Sparkles } from "lucide-react";
-import { type AuditEvent, type ActivityTemplate, type ActivityTemplatePayload, type ActivityUpdatePayload, type CreateActivityPayload, type CommunicationMessage, type CommunicationProvider, type DashboardResponse, type Discipline, type JournalActivity, type LifeModule, type ModulePayload, type ModuleUpdatePayload, type QuickLogPayload, createCommunicationProvider, createActivityTemplate, archiveModule, pauseModule, resumeModule, createActivity, createModule, deleteActivity, updateActivity, getActivities, getActivityTemplates, getAuditEvents, getCommunicationMessages, getCommunicationProviders, getDashboard, getDisciplines, getModules, linkActivityToStep, quickLog, sendCommunicationMessage, updateModule } from "./api/atlas";
+import { type AuditEvent, type ActivityTemplate, type ActivityTemplatePayload, type ActivityUpdatePayload, type CreateActivityPayload, type CommunicationMessage, type CommunicationProvider, type DashboardResponse, type Discipline, type JournalActivity, type LifeModule, type ModulePayload, type ModuleUpdatePayload, type QuickLogPayload, createCommunicationProvider, createActivityTemplate, archiveModule, pauseModule, resumeModule, createActivity, createModule, deleteActivity, deleteModule, updateActivity, getActivities, getActivityTemplates, getAuditEvents, getCommunicationMessages, getCommunicationProviders, getDashboard, getDisciplines, getModules, linkActivityToStep, quickLog, sendCommunicationMessage, updateModule } from "./api/atlas";
 import { ApiUnavailablePanel, NewsTile, QuoteStrip } from "./features/widgets";
 import { HobbiesTile } from "./features/hobbies";
 import { JournalView } from "./features/journal";
@@ -211,6 +211,19 @@ export function App() {
     }
   }
 
+  async function handleDeleteModule(moduleId: string) {
+    setIsSavingModule(true);
+    setError(null);
+    try {
+      await deleteModule(moduleId);
+      await refreshModulesAndDashboard();
+    } catch {
+      setError("לא הצלחתי למחוק את ה־Module.");
+    } finally {
+      setIsSavingModule(false);
+    }
+  }
+
   async function handleCreateCommunicationProvider() {
     setIsSavingModule(true);
     setError(null);
@@ -363,6 +376,7 @@ export function App() {
             isSaving={isSavingModule}
             onCreateModule={handleCreateModule}
             onUpdateModule={handleUpdateModule}
+            onDeleteModule={handleDeleteModule}
             onChanged={refreshModulesAndDashboard}
           />
         ) : null}
