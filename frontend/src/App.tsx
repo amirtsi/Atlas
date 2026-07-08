@@ -48,10 +48,11 @@ export function App() {
   }
 
   async function refreshModulesAndDashboard() {
-    const [nextModules, nextDashboard, nextAuditEvents] = await Promise.all([getModules(), getDashboard(), getAuditEvents()]);
+    const [nextModules, nextDashboard, nextAuditEvents, nextTemplates] = await Promise.all([getModules(), getDashboard(), getAuditEvents(), getActivityTemplates()]);
     setModules(nextModules);
     setDashboard(nextDashboard);
     setAuditEvents(nextAuditEvents);
+    setTemplates(nextTemplates);
   }
 
   useEffect(() => {

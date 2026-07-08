@@ -886,7 +886,6 @@ export function ModulesView({
                         disabled={isSaving}
                         onClick={() => {
                           onDeleteModule(module.id);
-                          setConfirmDeleteId(null);
                         }}
                       >
                         מחק
