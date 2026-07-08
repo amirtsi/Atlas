@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, BookOpen, Bug, Check, ClipboardList, FlaskConical, GraduationCap, Plus, Rocket, Save, Server, Target, Trash2, Zap } from "lucide-react";
+import { Activity, BookOpen, Bug, Check, ClipboardList, FlaskConical, GraduationCap, Pencil, Plus, Rocket, Save, Server, Target, Trash2, Zap } from "lucide-react";
 import { completeLearningUnit, completeProjectItem, createLearningUnit, createProjectItem, deleteLearningUnit, deleteProjectItem, getLearningOverview, getModuleBehavior, getProjectOverview, getWellbeingOverview, logWellbeingSession, quickLog, type Accent, type Discipline, type LearningOverview, type LearningUnitType, type LifeModule, type ModuleBehavior, type ModulePayload, type ModuleUpdatePayload, type ProjectItem, type ProjectItemType, type ProjectOverview, type WellbeingOverview, updateLearningUnit, updateModuleBehavior, updateProjectItem } from "../api/atlas";
 import { Chip, ProgressBar } from "../shared/ui";
 import { accentColorVar, accentForSlug, disciplineLabel, formatActivityTime, moduleTypeLabel, slugify, toConfigNumber, toNumberDraft, toOptionalMinutes } from "../shared/format";
@@ -557,6 +557,7 @@ export function ModulesView({
   isSaving,
   onCreateModule,
   onUpdateModule,
+  onDeleteModule,
   onChanged
 }: {
   modules: LifeModule[];
@@ -564,6 +565,7 @@ export function ModulesView({
   isSaving: boolean;
   onCreateModule: (payload: ModulePayload) => void;
   onUpdateModule: (moduleId: string, payload: ModuleUpdatePayload) => void;
+  onDeleteModule: (moduleId: string) => void;
   onChanged: () => void;
 }) {
   const [name, setName] = useState("");
@@ -573,6 +575,8 @@ export function ModulesView({
   const [priority, setPriority] = useState("3");
   const [description, setDescription] = useState("");
   const [drafts, setDrafts] = useState<Record<string, { status: string; priority: string }>>({});
+  const [editId, setEditId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [selectedModuleId, setSelectedModuleId] = useState("");
   const [behavior, setBehavior] = useState<ModuleBehavior | null>(null);
   const [behaviorDraft, setBehaviorDraft] = useState<Record<string, string>>({});
@@ -806,6 +810,21 @@ export function ModulesView({
           {modulesByPriority.map((module) => {
             const draft = draftFor(module);
             const accent = accentForSlug(disciplines.find((discipline) => discipline.id === module.discipline_id)?.slug);
+            if (editId === module.id) {
+              return (
+                <ModuleEditCard
+                  key={module.id}
+                  module={module}
+                  disciplines={disciplines}
+                  isSaving={isSaving}
+                  onSave={(payload) => {
+                    onUpdateModule(module.id, payload);
+                    setEditId(null);
+                  }}
+                  onCancel={() => setEditId(null)}
+                />
+              );
+            }
             return (
               <article className={`module-row ${selectedModule?.id === module.id ? "selected" : ""}`} key={module.id}>
                 <div className="module-row-main">
@@ -846,6 +865,49 @@ export function ModulesView({
                   <button className="module-save module-inspect" type="button" onClick={() => setSelectedModuleId(module.id)}>
                     Behavior
                   </button>
+                  <button
+                    className="module-save"
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => {
+                      setConfirmDeleteId(null);
+                      setEditId(module.id);
+                    }}
+                  >
+                    <Pencil size={15} />
+                    עריכה
+                  </button>
+                  {confirmDeleteId === module.id ? (
+                    <span className="module-delete-confirm">
+                      <span dir="auto">למחוק לצמיתות? הפריטים יימחקו, הפעילויות יישארו ללא שיוך</span>
+                      <button
+                        className="module-save module-delete-arm"
+                        type="button"
+                        disabled={isSaving}
+                        onClick={() => {
+                          onDeleteModule(module.id);
+                        }}
+                      >
+                        מחק
+                      </button>
+                      <button className="module-save" type="button" disabled={isSaving} onClick={() => setConfirmDeleteId(null)}>
+                        ביטול
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      className="module-save module-delete"
+                      type="button"
+                      disabled={isSaving}
+                      onClick={() => {
+                        setEditId(null);
+                        setConfirmDeleteId(module.id);
+                      }}
+                    >
+                      <Trash2 size={15} />
+                      מחיקה
+                    </button>
+                  )}
                 </div>
               </article>
             );

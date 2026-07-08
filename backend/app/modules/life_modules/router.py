@@ -180,3 +180,40 @@ def pause_module(module_id: str) -> dict:
 def resume_module(module_id: str) -> dict:
     with db_connection() as conn:
         return set_module_status(conn, module_id, "active")
+
+
+@router.delete("/{module_id}", response_model=LifeModuleOut)
+def delete_module(module_id: str) -> dict:
+    """Hard delete (owner's explicit choice): the module and its OWNED rows go;
+    real history (activities, goals) is kept and unlinked."""
+    with db_connection() as conn:
+        module = get_or_404(conn, "life_modules", module_id)
+
+        owned_tables = ("project_items", "learning_units", "hobby_ideas", "metrics", "activity_templates")
+        deleted_counts = {}
+        for table in owned_tables:
+            cursor = conn.execute(f"DELETE FROM {table} WHERE module_id = ?", (module_id,))
+            deleted_counts[table] = cursor.rowcount
+
+        unlinked_activities = conn.execute(
+            "UPDATE activities SET module_id = NULL WHERE module_id = ?", (module_id,)
+        ).rowcount
+        unlinked_goals = conn.execute(
+            "UPDATE goals SET module_id = NULL WHERE module_id = ?", (module_id,)
+        ).rowcount
+
+        conn.execute("DELETE FROM life_modules WHERE id = ?", (module_id,))
+        record_audit_event(
+            conn,
+            entity_type="life_module",
+            entity_id=module_id,
+            action="deleted",
+            summary=f"Deleted module: {module['name']}",
+            changes={
+                "type": module["type"],
+                **{f"deleted_{table}": count for table, count in deleted_counts.items() if count},
+                "unlinked_activities": unlinked_activities,
+                "unlinked_goals": unlinked_goals,
+            },
+        )
+        return module

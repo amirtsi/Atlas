@@ -431,6 +431,10 @@ export function updateModule(moduleId: string, payload: ModuleUpdatePayload): Pr
   });
 }
 
+export function deleteModule(moduleId: string): Promise<LifeModule> {
+  return request<LifeModule>(`/modules/${moduleId}`, { method: "DELETE" });
+}
+
 export function archiveModule(moduleId: string): Promise<LifeModule> {
   return request<LifeModule>(`/modules/${moduleId}/archive`, { method: "POST" });
 }
