@@ -600,6 +600,10 @@ export function dropHobbyIdea(moduleId: string, ideaId: string): Promise<HobbyId
   return request<HobbyIdea>(`/hobby/${moduleId}/ideas/${ideaId}/drop`, { method: "POST" });
 }
 
+export function deferHobbyIdea(moduleId: string, ideaId: string): Promise<HobbyIdea> {
+  return request<HobbyIdea>(`/hobby/${moduleId}/ideas/${ideaId}/defer`, { method: "POST" });
+}
+
 export function deleteHobbyIdea(moduleId: string, ideaId: string): Promise<HobbyIdea> {
   return request<HobbyIdea>(`/hobby/${moduleId}/ideas/${ideaId}`, { method: "DELETE" });
 }

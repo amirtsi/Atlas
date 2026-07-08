@@ -564,7 +564,7 @@ button,
 }
 
 .hobby-tile-row {
-  padding: var(--sp-2) 0;
+  padding: 5px 0;
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -580,8 +580,11 @@ button,
 }
 
 .hobby-tile-line strong {
-  font-size: var(--fs-base);
+  font-size: var(--fs-sm);
   font-weight: var(--fw-semibold);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .hobby-gap {
@@ -599,8 +602,8 @@ button,
 }
 
 .hobby-next {
-  margin: 2px 0 0;
-  font-size: var(--fs-sm);
+  margin: 1px 0 0;
+  font-size: var(--fs-xs);
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -617,39 +620,91 @@ button,
 
 .hobby-tile-foot {
   margin-top: auto;
-  padding-top: var(--sp-2);
+  padding-top: 6px;
   border-top: 1px solid var(--border-subtle);
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   font-size: var(--fs-xs);
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
-/* ---- Hobbies modal + backlog ------------------------------------ */
+/* ---- Hobbies modal — the idea deck ------------------------------ */
 
-.hobby-modal-row {
+.hobby-deck {
   border-top: 1px solid var(--border-subtle);
   padding: var(--sp-3) 0;
 }
 
-.hobby-modal-row:first-child {
+.hobby-deck:first-child {
   border-top: 0;
 }
 
-.hobby-modal-head {
+.hobby-deck-head {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
+  margin-bottom: var(--sp-3);
 }
 
-.hobby-modal-head .spacer {
+.hobby-deck-head strong {
+  font-size: var(--fs-base);
+  font-weight: var(--fw-semibold);
+}
+
+.hobby-next-card {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--surface-soft);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--r-md);
+}
+
+.hobby-next-card .hobby-next-tag {
+  margin-inline-end: 0;
+}
+
+.hobby-next-card-empty {
+  border-color: var(--border-subtle);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.hobby-next-title {
   flex: 1;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.hobby-modal-stats {
-  margin: var(--sp-1) 0 0;
+.hobby-card-actions {
+  display: inline-flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.hobby-deck-more {
+  margin: var(--sp-2) 0 0;
   font-size: var(--fs-xs);
   color: var(--text-muted);
+}
+
+.hobby-editor-link {
+  font: inherit;
+  color: var(--text-secondary);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline dotted;
+}
+
+.hobby-editor-link:hover {
+  color: var(--text-primary);
 }
 
 .hobby-action {
@@ -687,7 +742,7 @@ button,
   color: var(--red);
 }
 
-.hobby-backlog {
+.hobby-editor {
   margin-top: var(--sp-3);
   padding: var(--sp-3) var(--sp-4);
   background: var(--surface-soft);
@@ -695,17 +750,7 @@ button,
   border-radius: var(--r-md);
 }
 
-.hobby-backlog-title {
-  display: block;
-  font-size: var(--fs-xs);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  font-weight: var(--fw-semibold);
-  margin-bottom: var(--sp-2);
-}
-
-.hobby-backlog-empty {
+.hobby-editor-empty {
   margin: 0;
   font-size: var(--fs-sm);
   color: var(--text-muted);
@@ -732,16 +777,6 @@ button,
   white-space: nowrap;
 }
 
-.hobby-idea-closed .title {
-  color: var(--text-muted);
-  text-decoration: line-through;
-}
-
-.hobby-idea-closed small {
-  color: var(--text-muted);
-  font-size: var(--fs-xs);
-}
-
 .hobby-idea-pin {
   color: var(--accent);
   background: var(--accent-soft);
@@ -753,7 +788,6 @@ button,
   padding: 1px 7px;
 }
 
-.hobby-idea input,
 .hobby-idea-add input {
   flex: 1;
   min-width: 0;
@@ -772,33 +806,11 @@ button,
   margin-top: var(--sp-2);
 }
 
-/* ---- Hobby board (modules page) ---------------------------------- */
+/* ---- Hobby board (modules page): the same deck, standalone ------- */
 
-.hobby-stat-row {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--sp-3);
-  margin-bottom: var(--sp-3);
-}
-
-.hobby-stat {
-  background: var(--surface-soft);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--r-md);
-  padding: var(--sp-3);
-}
-
-.hobby-stat strong {
-  display: block;
-  font-size: var(--fs-xl);
-  font-variant-numeric: tabular-nums;
-}
-
-.hobby-stat span {
-  font-size: var(--fs-xs);
-  color: var(--text-muted);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+.hobby-board .hobby-deck {
+  border-top: 0;
+  padding-top: 0;
 }
 
 /* ---- Tech News tile -------------------------------------------- */

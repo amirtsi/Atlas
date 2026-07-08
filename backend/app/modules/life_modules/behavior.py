@@ -122,12 +122,16 @@ def hobby_days_since_last(conn: Connection, module_id: str) -> int | None:
 
 
 def hobby_next_idea(conn: Connection, module_id: str) -> dict | None:
-    """The suggestion: pinned open idea if any, else the oldest open idea."""
+    """Top of the deck: pinned open idea if any, else oldest open idea.
+
+    A deferred idea ("דלג") moves to the back — deferred_at replaces
+    created_at in the ordering.
+    """
     row = conn.execute(
         """
         SELECT id, title FROM hobby_ideas
         WHERE module_id = ? AND status = 'open'
-        ORDER BY pinned DESC, created_at ASC
+        ORDER BY pinned DESC, COALESCE(deferred_at, created_at) ASC
         LIMIT 1
         """,
         (module_id,),

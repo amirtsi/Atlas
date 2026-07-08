@@ -13,12 +13,13 @@ router = APIRouter(prefix="/hobby", tags=["hobby"])
 
 VALID_IDEA_STATUSES = {"open", "done", "dropped"}
 
-# Pinned first, then oldest — the same order the behavior summary uses to pick "next".
+# Deck order — the same order the behavior summary uses to pick "next":
+# pinned first, then oldest; a deferred idea's deferred_at replaces created_at.
 _IDEAS_ORDER = """
     ORDER BY
       CASE status WHEN 'open' THEN 0 WHEN 'done' THEN 1 ELSE 2 END,
       pinned DESC,
-      created_at ASC
+      COALESCE(deferred_at, created_at) ASC
 """
 
 
@@ -160,6 +161,30 @@ def complete_idea(module_id: str, idea_id: str, payload: HobbyIdeaComplete) -> d
             action="completed",
             summary=f"Did it: {idea['title']}",
             changes={"logged_activity": bool(activity_id)},
+        )
+        return _get_idea(conn, module_id, idea_id)
+
+
+@router.post("/{module_id}/ideas/{idea_id}/defer")
+def defer_idea(module_id: str, idea_id: str) -> dict:
+    """Send the idea to the back of the deck ("דלג") — stays open, loses its pin."""
+    now = utc_now_iso()
+    with db_connection() as conn:
+        _get_hobby_module(conn, module_id, for_write=True)
+        idea = _get_idea(conn, module_id, idea_id)
+        if idea["status"] != "open":
+            raise HTTPException(status_code=409, detail="Idea is not open")
+        conn.execute(
+            "UPDATE hobby_ideas SET deferred_at = ?, pinned = 0, updated_at = ? WHERE id = ?",
+            (now, now, idea_id),
+        )
+        record_audit_event(
+            conn,
+            entity_type="hobby_idea",
+            entity_id=idea_id,
+            action="deferred",
+            summary=f"Deferred hobby idea: {idea['title']}",
+            changes={},
         )
         return _get_idea(conn, module_id, idea_id)
 
